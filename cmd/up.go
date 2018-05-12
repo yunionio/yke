@@ -23,7 +23,7 @@ func UpCommand() cli.Command {
 			Name:   "config",
 			Usage:  "Specify an alternate cluster YAML file",
 			Value:  pki.ClusterConfig,
-			EnvVar: "RKE_CONFIG",
+			EnvVar: "YKE_CONFIG",
 		},
 		cli.BoolFlag{
 			Name:  "local",
