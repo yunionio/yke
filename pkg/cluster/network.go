@@ -10,12 +10,11 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
-	//"github.com/rancher/rke/pki"
-	//"github.com/rancher/rke/templates"
 	"golang.org/x/sync/errgroup"
 
 	"yunion.io/yke/pkg/docker"
 	"yunion.io/yke/pkg/hosts"
+	"yunion.io/yke/pkg/templates"
 	"yunion.io/yke/pkg/types"
 	"yunion.io/yunioncloud/pkg/log"
 )
@@ -92,6 +91,44 @@ var ControlPlanePortList = []string{
 
 var WorkerPortList = []string{
 	KubeletPort,
+}
+
+func (c *Cluster) deployNetworkPlugin(ctx context.Context) error {
+	log.Infof("[network] Setting up network plugin: %s", c.Network.Plugin)
+	switch c.Network.Plugin {
+	case YunionNetworkPlugin:
+		return c.doYunionDeploy(ctx)
+	default:
+		return fmt.Errorf("[network] Unsupported network plugin: %s", c.Network.Plugin)
+	}
+}
+
+func (c *Cluster) doYunionDeploy(ctx context.Context) error {
+	yunionConfig := map[string]string{
+		ClusterCIDR:          c.ClusterCIDR,
+		RBACConfig:           c.Authorization.Mode,
+		CNIImage:             c.SystemImages.YunionCNI,
+		"YunionBridge":       c.Network.Options[YunionBridge],
+		"YunionAuthURL":      c.Network.Options[YunionAuthURL],
+		"YunionAdminUser":    c.Network.Options[YunionAdminUser],
+		"YunionAdminPasswd":  c.Network.Options[YunionAdminPasswd],
+		"YunionAdminProject": c.Network.Options[YunionAdminProject],
+		"YunionRegion":       c.Network.Options[YunionRegion],
+	}
+	pluginYaml, err := c.getNetworkPluginManifest(yunionConfig)
+	if err != nil {
+		return err
+	}
+	return c.doAddonDeploy(ctx, pluginYaml, NetworkPluginResourceName)
+}
+
+func (c *Cluster) getNetworkPluginManifest(pluginConfig map[string]string) (string, error) {
+	switch c.Network.Plugin {
+	case YunionNetworkPlugin:
+		return templates.CompileTemplateFromMap(templates.YunionCNITemplate, pluginConfig)
+	default:
+		return "", fmt.Errorf("[network] Unsupported network plugin: %s", c.Network.Plugin)
+	}
 }
 
 func (c *Cluster) CheckClusterPorts(ctx context.Context, currentCluster *Cluster) error {

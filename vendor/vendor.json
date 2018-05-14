@@ -10,6 +10,36 @@
 			"revisionTime": "2018-03-27T12:31:50Z"
 		},
 		{
+			"checksumSHA1": "JDComCcjgkS9/bIox0NGLTC/jIo=",
+			"path": "github.com/coreos/etcd/client",
+			"revision": "52f73c5a6cb0d1d196ffd6eced406c9d8502078a",
+			"revisionTime": "2018-01-09T22:17:43Z"
+		},
+		{
+			"checksumSHA1": "mKIXx1kDwmVmdIpZ3pJtRBuUKso=",
+			"path": "github.com/coreos/etcd/pkg/pathutil",
+			"revision": "52f73c5a6cb0d1d196ffd6eced406c9d8502078a",
+			"revisionTime": "2018-01-09T22:17:43Z"
+		},
+		{
+			"checksumSHA1": "z+C4BtPa8wbOUKW5dmHyhNnTulg=",
+			"path": "github.com/coreos/etcd/pkg/srv",
+			"revision": "52f73c5a6cb0d1d196ffd6eced406c9d8502078a",
+			"revisionTime": "2018-01-09T22:17:43Z"
+		},
+		{
+			"checksumSHA1": "fqju8lgR+3vLJLAEPxhV6P7JAHY=",
+			"path": "github.com/coreos/etcd/pkg/types",
+			"revision": "52f73c5a6cb0d1d196ffd6eced406c9d8502078a",
+			"revisionTime": "2018-01-09T22:17:43Z"
+		},
+		{
+			"checksumSHA1": "SCXhykntdCkvDe22S/RNButQ0C0=",
+			"path": "github.com/coreos/etcd/version",
+			"revision": "52f73c5a6cb0d1d196ffd6eced406c9d8502078a",
+			"revisionTime": "2018-01-09T22:17:43Z"
+		},
+		{
 			"checksumSHA1": "97BsbXOiZ8+Kr+LIuZkQFtSj7H4=",
 			"path": "github.com/coreos/go-semver/semver",
 			"revision": "e214231b295a8ea9479f11b70b35d5acf3556d9b",
@@ -317,6 +347,12 @@
 			"path": "github.com/spf13/pflag",
 			"revision": "4c012f6dcd9546820e378d0bdda4d8fc772cdfea",
 			"revisionTime": "2017-11-06T14:28:49Z"
+		},
+		{
+			"checksumSHA1": "zZdLV/WBF/TaJd6cTT+adZ7UfoI=",
+			"path": "github.com/ugorji/go/codec",
+			"revision": "b5b949564861e43a03568a0b134c135cf318e5c8",
+			"revisionTime": "2018-02-05T16:51:14Z"
 		},
 		{
 			"checksumSHA1": "9/2qvuFPQxW7ZXzQSOYwqZb5cNg=",
@@ -1159,5 +1195,5 @@
 			"revisionTime": "2018-05-08T12:24:10Z"
 		}
 	],
-	"rootPath": "yunion.io/k8s-deploy"
+	"rootPath": "yunion.io/yke"
 }

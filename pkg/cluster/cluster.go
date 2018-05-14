@@ -270,6 +270,30 @@ func ApplyAuthzResources(ctx context.Context, config types.KubernetesEngineConfi
 	return nil
 }
 
+func (c *Cluster) SyncLabelsAndTaints(ctx context.Context) error {
+	if len(c.ControlPlaneHosts) > 0 {
+		log.Infof("[sync] Syncing nodes Labels and Taints")
+		k8sClient, err := k8s.NewClient(c.LocalKubeConfigPath, c.K8sWrapTransport)
+		if err != nil {
+			return fmt.Errorf("Failed to initialize new kubernetes client: %v", err)
+		}
+		for _, host := range hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts) {
+			if err := k8s.SetAddressesAnnotations(k8sClient, host.HostnameOverride, host.InternalAddress, host.Address); err != nil {
+				return err
+			}
+			if err := k8s.SyncLabels(k8sClient, host.HostnameOverride, host.ToAddLabels, host.ToDelLabels); err != nil {
+				return err
+			}
+			// Taints are not being added by user
+			if err := k8s.SyncTaints(k8sClient, host.HostnameOverride, host.ToAddTaints, host.ToDelTaints); err != nil {
+				return err
+			}
+		}
+		log.Infof("[sync] Successfully synced nodes Labels and Taints")
+	}
+	return nil
+}
+
 func (c *Cluster) getEtcdProcessHostMap(readyEtcdHosts []*hosts.Host) map[*hosts.Host]types.Process {
 	etcdProcessHostMap := make(map[*hosts.Host]types.Process)
 	for _, host := range c.EtcdHosts {
@@ -354,4 +378,34 @@ func (c *Cluster) DeployWorkerPlane(ctx context.Context) error {
 		return fmt.Errorf("[workerPlane] Failed to bring up Worker Plane: %v", err)
 	}
 	return nil
+}
+
+func ConfigureCluster(
+	ctx context.Context,
+	config types.KubernetesEngineConfig,
+	crtBundle map[string]pki.CertificatePKI,
+	clusterFilePath, configDir string,
+	k8sWrapTransport k8s.WrapTransport,
+	useKubectl bool) error {
+	// dialer factories are not needed here since we are not uses docker only k8s jobs
+	kubeCluster, err := ParseCluster(ctx, &config, clusterFilePath, configDir, nil, nil, k8sWrapTransport)
+	if err != nil {
+		return err
+	}
+	kubeCluster.UseKubectlDeploy = useKubectl
+	if len(kubeCluster.ControlPlaneHosts) > 0 {
+		kubeCluster.Certificates = crtBundle
+		if err := kubeCluster.deployNetworkPlugin(ctx); err != nil {
+			return err
+		}
+		return kubeCluster.deployAddons(ctx)
+	}
+	return nil
+}
+
+func (c *Cluster) deployAddons(ctx context.Context) error {
+	if err := c.deployK8sAddOns(ctx); err != nil {
+		return err
+	}
+	return c.deployUserAddOns(ctx)
 }

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	//"k8s.io/client-go/util/cert"
 	"github.com/urfave/cli"
+	"k8s.io/client-go/util/cert"
 
 	"yunion.io/yke/pkg/cluster"
 	"yunion.io/yke/pkg/k8s"
@@ -81,60 +81,60 @@ func ClusterUp(
 		return APIURL, caCrt, clientCert, clientKey, nil, err
 	}
 
-	//err = cluster.ReconcileCluster(ctx, kubeCluster, currentCluster, updateOnly)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	err = cluster.ReconcileCluster(ctx, kubeCluster, currentCluster, updateOnly)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//err = kubeCluster.SetUpHosts(ctx)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	err = kubeCluster.SetUpHosts(ctx)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//if err := kubeCluster.PrePullK8sImages(ctx); err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	if err := kubeCluster.PrePullK8sImages(ctx); err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//err = kubeCluster.DeployControlPlane(ctx)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	err = kubeCluster.DeployControlPlane(ctx)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//// Apply Authz configuration after deploying controlplane
-	//err = cluster.ApplyAuthzResources(ctx, kubeCluster.KubernetesEngineConfig, clusterFilePath, configDir, k8sWrapTransport)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	// Apply Authz configuration after deploying controlplane
+	err = cluster.ApplyAuthzResources(ctx, kubeCluster.KubernetesEngineConfig, clusterFilePath, configDir, k8sWrapTransport)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//err = kubeCluster.SaveClusterState(ctx, rkeConfig)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	err = kubeCluster.SaveClusterState(ctx, config)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//err = kubeCluster.DeployWorkerPlane(ctx)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	err = kubeCluster.DeployWorkerPlane(ctx)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//if err = kubeCluster.CleanDeadLogs(ctx); err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	if err = kubeCluster.CleanDeadLogs(ctx); err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//err = kubeCluster.SyncLabelsAndTaints(ctx)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	err = kubeCluster.SyncLabelsAndTaints(ctx)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
-	//err = cluster.ConfigureCluster(ctx, kubeCluster.RancherKubernetesEngineConfig, kubeCluster.Certificates, clusterFilePath, configDir, k8sWrapTransport, false)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
-	//if len(kubeCluster.ControlPlaneHosts) > 0 {
-	//APIURL = fmt.Sprintf("https://" + kubeCluster.ControlPlaneHosts[0].Address + ":6443")
-	//clientCert = string(cert.EncodeCertPEM(kubeCluster.Certificates[pki.KubeAdminCertName].Certificate))
-	//clientKey = string(cert.EncodePrivateKeyPEM(kubeCluster.Certificates[pki.KubeAdminCertName].Key))
-	//}
-	//caCrt = string(cert.EncodeCertPEM(kubeCluster.Certificates[pki.CACertName].Certificate))
+	err = cluster.ConfigureCluster(ctx, kubeCluster.KubernetesEngineConfig, kubeCluster.Certificates, clusterFilePath, configDir, k8sWrapTransport, false)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
+	if len(kubeCluster.ControlPlaneHosts) > 0 {
+		APIURL = fmt.Sprintf("https://" + kubeCluster.ControlPlaneHosts[0].Address + ":6443")
+		clientCert = string(cert.EncodeCertPEM(kubeCluster.Certificates[pki.KubeAdminCertName].Certificate))
+		clientKey = string(cert.EncodePrivateKeyPEM(kubeCluster.Certificates[pki.KubeAdminCertName].Key))
+	}
+	caCrt = string(cert.EncodeCertPEM(kubeCluster.Certificates[pki.CACertName].Certificate))
 
 	log.Infof("Finished building Kubernetes cluster successfully")
 	return APIURL, caCrt, clientCert, clientKey, kubeCluster.Certificates, nil
