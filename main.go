@@ -33,7 +33,7 @@ func mainErr() error {
 	app.Commands = []cli.Command{
 		cmd.UpCommand(),
 		//cmd.RemoveCommand(),
-		//cmd.VersionCommand(),
+		cmd.VersionCommand(),
 		cmd.ConfigCommand(),
 	}
 	app.Flags = []cli.Flag{
