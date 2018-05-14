@@ -10,7 +10,6 @@ import (
 )
 
 func runKubeAPI(ctx context.Context, host *hosts.Host, df tunnel.DialerFactory, prsMap map[string]types.PrivateRegistry, kubeAPIProcess types.Process, alpineImage string) error {
-
 	imageCfg, hostCfg, healthCheckURL := GetProcessConfig(kubeAPIProcess)
 	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, KubeAPIContainerName, host.Address, ControlRole, prsMap); err != nil {
 		return err

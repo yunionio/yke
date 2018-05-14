@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types"
+	"golang.org/x/sync/errgroup"
 
 	"yunion.io/yke/pkg/hosts"
+	"yunion.io/yke/pkg/pki"
 	"yunion.io/yke/pkg/services"
 	ytypes "yunion.io/yke/pkg/types"
 	"yunion.io/yunioncloud/pkg/log"
@@ -115,6 +117,43 @@ func (c *Cluster) InvertIndexHosts() error {
 		if !newHost.IsWorker {
 			newHost.ToDelLabels[workerRoleLabel] = "true"
 		}
+	}
+	return nil
+}
+
+func (c *Cluster) SetUpHosts(ctx context.Context) error {
+	if c.Authentication.Strategy == X509AuthenticationProvider {
+		log.Infof("[certificates] Deploying kubernetes certificates to Cluster nodes")
+		hosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
+		var errgrp errgroup.Group
+
+		for _, host := range hosts {
+			runHost := host
+			errgrp.Go(func() error {
+				return pki.DeployCertificatesOnPlaneHost(ctx, runHost, c.KubernetesEngineConfig, c.Certificates, c.SystemImages.CertDownloader, c.PrivateRegistriesMap)
+			})
+		}
+		if err := errgrp.Wait(); err != nil {
+			return err
+		}
+
+		if err := pki.DeployAdminConfig(ctx, c.Certificates[pki.KubeAdminCertName].Config, c.LocalKubeConfigPath); err != nil {
+			return err
+		}
+		log.Infof("[certificates] Successfully deployed kubernetes certificates to Cluster nodes")
+		if c.CloudProvider.Name != "" {
+			if err := deployCloudProviderConfig(ctx, hosts, c.SystemImages.Alpine, c.PrivateRegistriesMap, c.CloudConfigFile); err != nil {
+				return err
+			}
+			log.Infof("[%s] Successfully deployed kubernetes cloud config to Cluster nodes", CloudConfigServiceName)
+		}
+	}
+
+	if c.WebhookConfig != "" {
+		if err := deployWebhookConfig(ctx, c.ControlPlaneHosts, c.SystemImages.Alpine, c.WebhookConfig, c.PrivateRegistriesMap); err != nil {
+			return err
+		}
+		log.Infof("[%s] Successfully deployed kubernetes webhook file to Cluster nodes", WebhookConfigDeployer)
 	}
 	return nil
 }

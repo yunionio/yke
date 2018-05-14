@@ -111,6 +111,12 @@ func validateServicesOptions(c *Cluster) error {
 			return fmt.Errorf("External etcd path can't be empty")
 		}
 	}
+	// Validate kube apiserver webhook config
+	if c.Services.KubeAPI.ExtraArgs["authentication-token-webhook-config-file"] != "" {
+		if c.WebhookConfig == "" {
+			return fmt.Errorf("Webhook config can't be empty")
+		}
+	}
 	return nil
 }
 

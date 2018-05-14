@@ -9,11 +9,13 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/cert"
 
+	"yunion.io/yke/pkg/authz"
 	"yunion.io/yke/pkg/docker"
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/k8s"
@@ -237,6 +239,37 @@ func getLocalAdminConfigWithNewAddress(localConfigPath, cpAddress string, cluste
 		string(config.KeyData))
 }
 
+func ApplyAuthzResources(ctx context.Context, config types.KubernetesEngineConfig, clusterFilePath, configDir string, k8sWrapTransport k8s.WrapTransport) error {
+	// dialer factories are not needed here since we are not uses docker only k8s jobs
+	kubeCluster, err := ParseCluster(ctx, &config, clusterFilePath, configDir, nil, nil, k8sWrapTransport)
+	if err != nil {
+		return err
+	}
+	if len(kubeCluster.ControlPlaneHosts) == 0 {
+		return nil
+	}
+	if err := authz.ApplyJobDeployerServiceAccount(ctx, kubeCluster.LocalKubeConfigPath, kubeCluster.K8sWrapTransport); err != nil {
+		return fmt.Errorf("Failed to apply the ServiceAccount needed for job execution: %v", err)
+	}
+	if kubeCluster.Authorization.Mode == NoneAuthorizationMode {
+		return nil
+	}
+	if kubeCluster.Authorization.Mode == services.RBACAuthorizationMode {
+		if err := authz.ApplySystemNodeClusterRoleBinding(ctx, kubeCluster.LocalKubeConfigPath, kubeCluster.K8sWrapTransport); err != nil {
+			return fmt.Errorf("Failed to apply the ClusterRoleBinding needed for node authorization: %v", err)
+		}
+	}
+	if kubeCluster.Authorization.Mode == services.RBACAuthorizationMode && kubeCluster.Services.KubeAPI.PodSecurityPolicy {
+		if err := authz.ApplyDefaultPodSecurityPolicy(ctx, kubeCluster.LocalKubeConfigPath, kubeCluster.K8sWrapTransport); err != nil {
+			return fmt.Errorf("Failed to apply default PodSecurityPolicy: %v", err)
+		}
+		if err := authz.ApplyDefaultPodSecurityPolicyRole(ctx, kubeCluster.LocalKubeConfigPath, kubeCluster.K8sWrapTransport); err != nil {
+			return fmt.Errorf("Failed to apply default PodSecurityPolicy ClusterRole and ClusterRoleBinding: %v", err)
+		}
+	}
+	return nil
+}
+
 func (c *Cluster) getEtcdProcessHostMap(readyEtcdHosts []*hosts.Host) map[*hosts.Host]types.Process {
 	etcdProcessHostMap := make(map[*hosts.Host]types.Process)
 	for _, host := range c.EtcdHosts {
@@ -247,74 +280,78 @@ func (c *Cluster) getEtcdProcessHostMap(readyEtcdHosts []*hosts.Host) map[*hosts
 	return etcdProcessHostMap
 }
 
-func (c *Cluster) BuildEtcdProcess(host *hosts.Host, etcdHosts []*hosts.Host) types.Process {
-	nodeName := pki.GetEtcdCrtName(host.InternalAddress)
-	initCluster := ""
-	if len(etcdHosts) == 0 {
-		initCluster = services.GetEtcdInitialCluster(c.EtcdHosts)
+func (c *Cluster) PrePullK8sImages(ctx context.Context) error {
+	log.Infof("Pre-pulling kubernetes images")
+	var errgrp errgroup.Group
+	hosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
+	log.Errorf("Get unique host: %#v", hosts)
+	for _, host := range hosts {
+		//if !host.UpdateWorker {
+		//continue
+		//}
+		runHost := host
+		errgrp.Go(func() error {
+			return docker.UseLocalOrPull(ctx, runHost.DClient, runHost.Address, c.SystemImages.Kubernetes, "pre-deploy", c.PrivateRegistriesMap)
+		})
+	}
+	if err := errgrp.Wait(); err != nil {
+		return err
+	}
+	log.Infof("Kubernetes images pulled successfully")
+	return nil
+}
+
+func (c *Cluster) DeployControlPlane(ctx context.Context) error {
+	// Deploy Etcd Plane
+	etcdProcessHostMap := c.getEtcdProcessHostMap(nil)
+	if len(c.Services.Etcd.ExternalURLs) > 0 {
+		log.Infof("[etcd] External etcd connection string has been specified, skipping etcd plane")
 	} else {
-		initCluster = services.GetEtcdInitialCluster(etcdHosts)
-	}
-
-	clusterState := "new"
-	if host.ExistingEtcdCluster {
-		clusterState = "existing"
-	}
-	args := []string{
-		"/usr/local/bin/etcd",
-		"--peer-client-cert-auth",
-		"--client-cert-auth",
-	}
-
-	CommandArgs := map[string]string{
-		"name":                        "etcd-" + host.HostnameOverride,
-		"data-dir":                    "/var/lib/yunion/etcd",
-		"advertise-client-urls":       "https://" + host.InternalAddress + ":2379,https://" + host.InternalAddress + ":4001",
-		"listen-client-urls":          "https://0.0.0.0:2379",
-		"initial-advertise-peer-urls": "https://" + host.InternalAddress + ":2380",
-		"listen-peer-urls":            "https://0.0.0.0:2380",
-		"initial-cluster-token":       "etcd-cluster-1",
-		"initial-cluster":             initCluster,
-		"initial-cluster-state":       clusterState,
-		"trusted-ca-file":             pki.GetCertPath(pki.CACertName),
-		"peer-trusted-ca-file":        pki.GetCertPath(pki.CACertName),
-		"cert-file":                   pki.GetCertPath(nodeName),
-		"key-file":                    pki.GetKeyPath(nodeName),
-		"peer-cert-file":              pki.GetCertPath(nodeName),
-		"peer-key-file":               pki.GetKeyPath(nodeName),
-	}
-
-	Binds := []string{
-		"/var/lib/etcd:/var/lib/yunion/etcd:z",
-		"/etc/kubernetes:/etc/kubernetes:z",
-	}
-
-	for arg, value := range c.Services.Etcd.ExtraArgs {
-		if _, ok := c.Services.Etcd.ExtraArgs[arg]; ok {
-			CommandArgs[arg] = value
+		if err := services.RunEtcdPlane(ctx, c.EtcdHosts, etcdProcessHostMap, c.LocalConnDialerFactory, c.PrivateRegistriesMap, c.UpdateWorkersOnly, c.SystemImages.Alpine); err != nil {
+			return fmt.Errorf("[etcd] Failed to bring up Etcd Plane: %v", err)
 		}
 	}
 
-	for arg, value := range CommandArgs {
-		cmd := fmt.Sprintf("--%s=%s", arg, value)
-		args = append(args, cmd)
+	// Deploy Control plane
+	processMap := map[string]types.Process{
+		services.SidekickContainerName:       c.BuildSidecarProcess(),
+		services.KubeAPIContainerName:        c.BuildKubeAPIProcess(),
+		services.KubeControllerContainerName: c.BuildKubeControllerProcess(),
+		services.SchedulerContainerName:      c.BuildSchedulerProcess(),
+	}
+	if err := services.RunControlPlane(ctx, c.ControlPlaneHosts,
+		c.LocalConnDialerFactory,
+		c.PrivateRegistriesMap,
+		processMap,
+		c.UpdateWorkersOnly,
+		c.SystemImages.Alpine); err != nil {
+		return fmt.Errorf("[controlPlane] Failed to bring up Control Plane: %v", err)
 	}
 
-	Binds = append(Binds, c.Services.Etcd.ExtraBinds...)
+	return nil
+}
 
-	healthCheck := types.HealthCheck{
-		URL: services.EtcdHealthCheckURL,
+func (c *Cluster) DeployWorkerPlane(ctx context.Context) error {
+	// Deploy Worker Plane
+	processMap := map[string]types.Process{
+		services.SidekickContainerName:   c.BuildSidecarProcess(),
+		services.KubeproxyContainerName:  c.BuildKubeProxyProcess(),
+		services.NginxProxyContainerName: c.BuildProxyProcess(),
 	}
-	registryAuthConfig, _, _ := docker.GetImageRegistryConfig(c.Services.Etcd.Image, c.PrivateRegistriesMap)
-
-	return types.Process{
-		Name:                    services.EtcdContainerName,
-		Args:                    args,
-		Binds:                   Binds,
-		NetworkMode:             "host",
-		RestartPolicy:           "always",
-		Image:                   c.Services.Etcd.Image,
-		HealthCheck:             healthCheck,
-		ImageRegistryAuthConfig: registryAuthConfig,
+	kubeletProcessHostMap := make(map[*hosts.Host]types.Process)
+	for _, host := range hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts) {
+		kubeletProcessHostMap[host] = c.BuildKubeletProcess(host)
 	}
+	allHosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
+	if err := services.RunWorkerPlane(ctx, allHosts,
+		c.LocalConnDialerFactory,
+		c.PrivateRegistriesMap,
+		processMap,
+		kubeletProcessHostMap,
+		c.Certificates,
+		c.UpdateWorkersOnly,
+		c.SystemImages.Alpine); err != nil {
+		return fmt.Errorf("[workerPlane] Failed to bring up Worker Plane: %v", err)
+	}
+	return nil
 }
