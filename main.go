@@ -9,8 +9,6 @@ import (
 	"yunion.io/yunioncloud/pkg/log"
 )
 
-var VERSION = "v0.0.1-dev"
-
 func main() {
 	if err := mainErr(); err != nil {
 		log.Fatalf("%v", err)
@@ -20,7 +18,7 @@ func main() {
 func mainErr() error {
 	app := cli.NewApp()
 	app.Name = "yke"
-	app.Version = VERSION
+	app.Version = cmd.Version().String()
 	app.Usage = "Yunion Kubernetes Engine, Running kubernetes cluster in the cloud"
 	app.Before = func(ctx *cli.Context) error {
 		if ctx.GlobalBool("debug") {
