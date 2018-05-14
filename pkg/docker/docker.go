@@ -20,7 +20,7 @@ import (
 	"yunion.io/yunioncloud/pkg/util/sets"
 )
 
-func DoRunContainer(ctx context.Context, dClient *client.Client, imageCfg *container.Config, hostCfg *container.HostConfig, containerName string, hostname string, plane string, prsMap map[string]ytypes.PrivateRegistry) error {
+func DoRunContainer(ctx context.Context, dClient *client.Client, imageCfg *container.Config, hostCfg *container.HostConfig, containerName, hostname, plane string, prsMap map[string]ytypes.PrivateRegistry) error {
 	container, err := dClient.ContainerInspect(ctx, containerName)
 	if err != nil {
 		if !client.IsErrNotFound(err) {
@@ -282,7 +282,7 @@ func ReadFileFromContainer(ctx context.Context, dClient *client.Client, hostname
 	return string(file), nil
 }
 
-func ReadContainerLogs(ctx context.Context, dClient *client.Client, hostname, containerName string) (io.ReadCloser, error) {
+func ReadContainerLogs(ctx context.Context, dClient *client.Client, containerName string) (io.ReadCloser, error) {
 	return dClient.ContainerLogs(ctx, containerName, types.ContainerLogsOptions{ShowStdout: true})
 }
 

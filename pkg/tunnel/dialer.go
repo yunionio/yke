@@ -22,6 +22,7 @@ type HostConfig struct {
 	Port            string
 	Username        string
 	SSHKeyString    string
+	SSHKeyPath      string
 	SSHPassphrase   []byte
 	UseSSHAgentAuth bool
 	DockerSocket    string
@@ -41,6 +42,7 @@ type dialer struct {
 }
 
 func newDialer(h HostConfig, kind string) (*dialer, error) {
+	var err error
 	d := &dialer{
 		sshAddress:      fmt.Sprintf("%s:%s", h.Address, h.Port),
 		username:        h.Username,
@@ -52,10 +54,11 @@ func newDialer(h HostConfig, kind string) (*dialer, error) {
 	}
 
 	if d.sshKeyString == "" {
-		return nil, fmt.Errorf("Private key must provided")
+		d.sshKeyString, err = PrivateKeyPath(h.SSHKeyPath)
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	log.Debugf("Dialer host config: %#v", h)
 
 	switch kind {
 	case "network", "health":
@@ -65,6 +68,8 @@ func newDialer(h HostConfig, kind string) (*dialer, error) {
 	if len(d.dockerSocket) == 0 {
 		d.dockerSocket = "/var/run/docker.sock"
 	}
+
+	log.Debugf("Dialer config: %#v", d)
 
 	return d, nil
 }

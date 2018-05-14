@@ -14,12 +14,15 @@ import (
 	"yunion.io/yunioncloud/pkg/log"
 )
 
-func PrivateKeyPath(sshKeyPath string) string {
+func PrivateKeyPath(sshKeyPath string) (string, error) {
 	if sshKeyPath[:2] == "~/" {
 		sshKeyPath = filepath.Join(os.Getenv("HOME"), sshKeyPath[2:])
 	}
-	buff, _ := ioutil.ReadFile(sshKeyPath)
-	return string(buff)
+	buff, err := ioutil.ReadFile(sshKeyPath)
+	if err != nil {
+		return "", err
+	}
+	return string(buff), nil
 }
 
 func parsePrivateKey(keyBuff string) (ssh.Signer, error) {

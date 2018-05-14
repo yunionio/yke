@@ -136,7 +136,8 @@ func FetchCertificatesFromHost(ctx context.Context, extraHosts []*hosts.Host, ho
 		crt, err := fetchFileFromHost(ctx, GetCertTempPath(certName), image, host, prsMap)
 		if err != nil {
 			if strings.Contains(err.Error(), "no such file or directory") ||
-				strings.Contains(err.Error(), "Could not find the file") {
+				strings.Contains(err.Error(), "Could not find the file") ||
+				strings.Contains(err.Error(), "No such container:path:") {
 				return nil, nil
 			}
 			return nil, err

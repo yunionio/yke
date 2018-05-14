@@ -50,6 +50,7 @@ func (h *Host) TunnelHostConfig() tunnel.HostConfig {
 		Port:         h.Port,
 		Username:     h.User,
 		SSHKeyString: h.SSHKey,
+		SSHKeyPath:   h.SSHKeyPath,
 	}
 }
 
@@ -122,4 +123,21 @@ func GetUniqueHostList(etcdHosts, cpHosts, workerHosts []*Host) []*Host {
 		uniqHostList = append(uniqHostList, host)
 	}
 	return uniqHostList
+}
+
+func GetToAddHosts(currentHosts, configHosts []*Host) []*Host {
+	toAddHosts := []*Host{}
+	for _, configHost := range configHosts {
+		found := false
+		for _, currentHost := range currentHosts {
+			if currentHost.Address == configHost.Address {
+				found = true
+				break
+			}
+		}
+		if !found {
+			toAddHosts = append(toAddHosts, configHost)
+		}
+	}
+	return toAddHosts
 }

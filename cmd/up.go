@@ -66,20 +66,20 @@ func ClusterUp(
 		return APIURL, caCrt, clientCert, clientKey, nil, err
 	}
 
-	//currentCluster, err := kubeCluster.GetClusterState(ctx)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
-	//if !disablePortCheck {
-	//if err = kubeCluster.CheckClusterPorts(ctx, currentCluster); err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
-	//}
+	currentCluster, err := kubeCluster.GetClusterState(ctx)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
+	if !disablePortCheck {
+		if err = kubeCluster.CheckClusterPorts(ctx, currentCluster); err != nil {
+			return APIURL, caCrt, clientCert, clientKey, nil, err
+		}
+	}
 
-	//err = cluster.SetUpAuthentication(ctx, kubeCluster, currentCluster)
-	//if err != nil {
-	//return APIURL, caCrt, clientCert, clientKey, nil, err
-	//}
+	err = cluster.SetUpAuthentication(ctx, kubeCluster, currentCluster)
+	if err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
 
 	//err = cluster.ReconcileCluster(ctx, kubeCluster, currentCluster, updateOnly)
 	//if err != nil {

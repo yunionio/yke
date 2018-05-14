@@ -1,0 +1,12 @@
+---
+pipeline:
+  publish-yke-certs-deployer:
+    image: plugins/docker
+    dockerfile: ./depends/yke-cert-deployer/Dockerfile
+    repo: zexi/yke-cert-deployer
+    context: package/
+    tag: ${DRONE_TAG}
+    secrets: [docker_username, docker_password]
+    when:
+      branch: master
+      event: tag
