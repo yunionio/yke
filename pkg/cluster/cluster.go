@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"strconv"
-	//"strings"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 	"k8s.io/client-go/kubernetes"
@@ -18,6 +18,7 @@ import (
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/k8s"
 	"yunion.io/yke/pkg/pki"
+	"yunion.io/yke/pkg/services"
 	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
 	"yunion.io/yunioncloud/pkg/log"
@@ -126,6 +127,7 @@ func ParseCluster(
 	}
 	return c, nil
 }
+
 func rebuildLocalAdminConfig(ctx context.Context, kubeCluster *Cluster) error {
 	if len(kubeCluster.ControlPlaneHosts) == 0 {
 		return nil
@@ -157,21 +159,6 @@ func rebuildLocalAdminConfig(ctx context.Context, kubeCluster *Cluster) error {
 	currentKubeConfig.Config = workingConfig
 	kubeCluster.Certificates[pki.KubeAdminCertName] = currentKubeConfig
 	return nil
-}
-
-func getLocalAdminConfigWithNewAddress(localConfigPath, cpAddress string, clusterName string) string {
-	config, _ := clientcmd.BuildConfigFromFlags("", localConfigPath)
-	if config == nil {
-		return ""
-	}
-	config.Host = fmt.Sprintf("https://%s:6443", cpAddress)
-	return pki.GetKubeConfigX509WithData(
-		"https://"+cpAddress+":6443",
-		clusterName,
-		pki.KubeAdminCertName,
-		string(config.CAData),
-		string(config.CertData),
-		string(config.KeyData))
 }
 
 func (c *Cluster) parseCloudConfig(ctx context.Context) (string, error) {
@@ -223,4 +210,111 @@ func isLocalConfigWorking(ctx context.Context, localKubeConfigPath string, k8sWr
 		return false
 	}
 	return true
+}
+
+func getLocalConfigAddress(localConfigPath string) (string, error) {
+	config, err := clientcmd.BuildConfigFromFlags("", localConfigPath)
+	if err != nil {
+		return "", err
+	}
+	splittedAdress := strings.Split(config.Host, ":")
+	address := splittedAdress[1]
+	return address[2:], nil
+}
+
+func getLocalAdminConfigWithNewAddress(localConfigPath, cpAddress string, clusterName string) string {
+	config, _ := clientcmd.BuildConfigFromFlags("", localConfigPath)
+	if config == nil {
+		return ""
+	}
+	config.Host = fmt.Sprintf("https://%s:6443", cpAddress)
+	return pki.GetKubeConfigX509WithData(
+		"https://"+cpAddress+":6443",
+		clusterName,
+		pki.KubeAdminCertName,
+		string(config.CAData),
+		string(config.CertData),
+		string(config.KeyData))
+}
+
+func (c *Cluster) getEtcdProcessHostMap(readyEtcdHosts []*hosts.Host) map[*hosts.Host]types.Process {
+	etcdProcessHostMap := make(map[*hosts.Host]types.Process)
+	for _, host := range c.EtcdHosts {
+		if !host.ToAddEtcdMember {
+			etcdProcessHostMap[host] = c.BuildEtcdProcess(host, readyEtcdHosts)
+		}
+	}
+	return etcdProcessHostMap
+}
+
+func (c *Cluster) BuildEtcdProcess(host *hosts.Host, etcdHosts []*hosts.Host) types.Process {
+	nodeName := pki.GetEtcdCrtName(host.InternalAddress)
+	initCluster := ""
+	if len(etcdHosts) == 0 {
+		initCluster = services.GetEtcdInitialCluster(c.EtcdHosts)
+	} else {
+		initCluster = services.GetEtcdInitialCluster(etcdHosts)
+	}
+
+	clusterState := "new"
+	if host.ExistingEtcdCluster {
+		clusterState = "existing"
+	}
+	args := []string{
+		"/usr/local/bin/etcd",
+		"--peer-client-cert-auth",
+		"--client-cert-auth",
+	}
+
+	CommandArgs := map[string]string{
+		"name":                        "etcd-" + host.HostnameOverride,
+		"data-dir":                    "/var/lib/yunion/etcd",
+		"advertise-client-urls":       "https://" + host.InternalAddress + ":2379,https://" + host.InternalAddress + ":4001",
+		"listen-client-urls":          "https://0.0.0.0:2379",
+		"initial-advertise-peer-urls": "https://" + host.InternalAddress + ":2380",
+		"listen-peer-urls":            "https://0.0.0.0:2380",
+		"initial-cluster-token":       "etcd-cluster-1",
+		"initial-cluster":             initCluster,
+		"initial-cluster-state":       clusterState,
+		"trusted-ca-file":             pki.GetCertPath(pki.CACertName),
+		"peer-trusted-ca-file":        pki.GetCertPath(pki.CACertName),
+		"cert-file":                   pki.GetCertPath(nodeName),
+		"key-file":                    pki.GetKeyPath(nodeName),
+		"peer-cert-file":              pki.GetCertPath(nodeName),
+		"peer-key-file":               pki.GetKeyPath(nodeName),
+	}
+
+	Binds := []string{
+		"/var/lib/etcd:/var/lib/yunion/etcd:z",
+		"/etc/kubernetes:/etc/kubernetes:z",
+	}
+
+	for arg, value := range c.Services.Etcd.ExtraArgs {
+		if _, ok := c.Services.Etcd.ExtraArgs[arg]; ok {
+			CommandArgs[arg] = value
+		}
+	}
+
+	for arg, value := range CommandArgs {
+		cmd := fmt.Sprintf("--%s=%s", arg, value)
+		args = append(args, cmd)
+	}
+
+	Binds = append(Binds, c.Services.Etcd.ExtraBinds...)
+
+	healthCheck := types.HealthCheck{
+		URL: services.EtcdHealthCheckURL,
+	}
+	registryAuthConfig, _, _ := docker.GetImageRegistryConfig(c.Services.Etcd.Image, c.PrivateRegistriesMap)
+
+	return types.Process{
+		Name:                    services.EtcdContainerName,
+		Args:                    args,
+		Binds:                   Binds,
+		NetworkMode:             "host",
+		RestartPolicy:           "always",
+		Image:                   c.Services.Etcd.Image,
+		HealthCheck:             healthCheck,
+		ImageRegistryAuthConfig: registryAuthConfig,
+	}
 }
