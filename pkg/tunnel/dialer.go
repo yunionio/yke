@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 const (
@@ -68,8 +66,6 @@ func newDialer(h HostConfig, kind string) (*dialer, error) {
 	if len(d.dockerSocket) == 0 {
 		d.dockerSocket = "/var/run/docker.sock"
 	}
-
-	log.Debugf("Dialer config: %#v", d)
 
 	return d, nil
 }
