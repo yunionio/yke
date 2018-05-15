@@ -30,7 +30,7 @@ func mainErr() error {
 	app.Email = ""
 	app.Commands = []cli.Command{
 		cmd.UpCommand(),
-		//cmd.RemoveCommand(),
+		cmd.RemoveCommand(),
 		cmd.VersionCommand(),
 		cmd.ConfigCommand(),
 	}

@@ -35,6 +35,7 @@ func (c *Cluster) ClusterRemove(ctx context.Context) error {
 	}
 
 	pki.RemoveAdminConfig(ctx, c.LocalKubeConfigPath)
+	pki.RemoveYunionUserConfig(ctx, c.LocalKubeYunionUserConfigPath)
 	return nil
 }
 

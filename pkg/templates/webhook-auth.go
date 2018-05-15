@@ -5,7 +5,7 @@ apiVersion: v1
 clusters:
 - cluster:
     insecure-skip-tls-verify: true
-    server: "{{.URL}}"
+    server: {{.URL}}
   name: webhook
 contexts:
 - context:

@@ -9,6 +9,10 @@ import (
 	"yunion.io/yke/pkg/types"
 )
 
+const (
+	WebhookHealthCheckURL = "http://127.0.0.1:8440/health"
+)
+
 func runYunionWebhook(ctx context.Context, host *hosts.Host, df tunnel.DialerFactory, prsMap map[string]types.PrivateRegistry, webhookProcess types.Process, alpineImage string) error {
 	imageCfg, hostCfg, _ := GetProcessConfig(webhookProcess)
 	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, YunionWebhookContainerName, host.Address, ControlRole, prsMap); err != nil {

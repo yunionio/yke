@@ -40,27 +40,28 @@ const (
 )
 
 type Cluster struct {
-	types.KubernetesEngineConfig `yaml:",inline"`
-	ConfigPath                   string
-	LocalKubeConfigPath          string
-	EtcdHosts                    []*hosts.Host
-	WorkerHosts                  []*hosts.Host
-	ControlPlaneHosts            []*hosts.Host
-	InactiveHosts                []*hosts.Host
-	KubeClient                   *kubernetes.Clientset
-	KubernetesServiceIP          net.IP
-	Certificates                 map[string]pki.CertificatePKI
-	ClusterDomain                string
-	ClusterCIDR                  string
-	ClusterDNSServer             string
-	DockerDialerFactory          tunnel.DialerFactory
-	LocalConnDialerFactory       tunnel.DialerFactory
-	PrivateRegistriesMap         map[string]types.PrivateRegistry
-	K8sWrapTransport             k8s.WrapTransport
-	UseKubectlDeploy             bool
-	UpdateWorkersOnly            bool
-	CloudConfigFile              string
-	WebhookConfig                string
+	types.KubernetesEngineConfig  `yaml:",inline"`
+	ConfigPath                    string
+	LocalKubeConfigPath           string
+	LocalKubeYunionUserConfigPath string
+	EtcdHosts                     []*hosts.Host
+	WorkerHosts                   []*hosts.Host
+	ControlPlaneHosts             []*hosts.Host
+	InactiveHosts                 []*hosts.Host
+	KubeClient                    *kubernetes.Clientset
+	KubernetesServiceIP           net.IP
+	Certificates                  map[string]pki.CertificatePKI
+	ClusterDomain                 string
+	ClusterCIDR                   string
+	ClusterDNSServer              string
+	DockerDialerFactory           tunnel.DialerFactory
+	LocalConnDialerFactory        tunnel.DialerFactory
+	PrivateRegistriesMap          map[string]types.PrivateRegistry
+	K8sWrapTransport              k8s.WrapTransport
+	UseKubectlDeploy              bool
+	UpdateWorkersOnly             bool
+	CloudConfigFile               string
+	WebhookConfig                 string
 }
 
 func ParseConfig(clusterFile string) (*types.KubernetesEngineConfig, error) {
@@ -114,6 +115,7 @@ func ParseCluster(
 		c.ConfigPath = pki.ClusterConfig
 	}
 	c.LocalKubeConfigPath = pki.GetLocalKubeConfig(c.ConfigPath, configDir)
+	c.LocalKubeYunionUserConfigPath = pki.GetLocalYunionKubeConfig(c.ConfigPath, configDir)
 
 	for _, pr := range c.PrivateRegistries {
 		if pr.URL == "" {

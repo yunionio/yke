@@ -25,4 +25,5 @@ const (
 	KubeAdminCertName         = "kube-admin"
 	KubeAdminOrganizationName = "system:masters"
 	KubeAdminConfigPrefix     = "kube_config_"
+	KubeYunionConfigPrefix    = "kube_config_yunion_"
 )

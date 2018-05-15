@@ -140,6 +140,9 @@ func (c *Cluster) SetUpHosts(ctx context.Context) error {
 		if err := pki.DeployAdminConfig(ctx, c.Certificates[pki.KubeAdminCertName].Config, c.LocalKubeConfigPath); err != nil {
 			return err
 		}
+		if err := pki.DeployYunionUserConfig(ctx, c.LocalKubeYunionUserConfigPath, c.ControlPlaneHosts[0]); err != nil {
+			return err
+		}
 		if err := deployAdminConfig(ctx, hosts, c.Certificates[pki.KubeAdminCertName].Config, c.SystemImages.Alpine, c.PrivateRegistriesMap); err != nil {
 			return err
 		}

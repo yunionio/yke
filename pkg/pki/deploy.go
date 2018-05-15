@@ -16,6 +16,7 @@ import (
 
 	"yunion.io/yke/pkg/docker"
 	"yunion.io/yke/pkg/hosts"
+	"yunion.io/yke/pkg/templates"
 	ytypes "yunion.io/yke/pkg/types"
 	"yunion.io/yunioncloud/pkg/log"
 )
@@ -77,6 +78,31 @@ func doRunDeployer(ctx context.Context, host *hosts.Host, containerEnv []string,
 		}
 		return nil
 	}
+}
+
+func DeployYunionUserConfig(ctx context.Context, localConfigPath string, host *hosts.Host) error {
+	log.Debugf("Deploying yunion user kubeconfig locally: %s", localConfigPath)
+	str, err := templates.CompileTemplateFromMap(templates.KubectlOsAuthTemplate, map[string]string{
+		"KubeAPIServerURL": fmt.Sprintf("https://%s:6443", host.Address),
+	})
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(localConfigPath, []byte(str), 0640)
+	if err != nil {
+		return fmt.Errorf("Failed to create local yunion kube user kubeconfig file: %v", err)
+	}
+	log.Infof("Successfully Deployed local yunion user kubeconfig at [%s]", localConfigPath)
+	return nil
+}
+
+func RemoveYunionUserConfig(ctx context.Context, localConfigPath string) {
+	log.Infof("Removing yunion user Kubeconfig: %s", localConfigPath)
+	if err := os.Remove(localConfigPath); err != nil {
+		log.Warningf("Failed to remove yunion user Kubeconfig file: %v", err)
+		return
+	}
+	log.Infof("Local yunion user Kubeconfig removed successfully")
 }
 
 func DeployAdminConfig(ctx context.Context, kubeConfig, localConfigPath string) error {

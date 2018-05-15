@@ -543,6 +543,7 @@ func (c *Cluster) BuildYunionWebhookProcess() types.Process {
 	s := c.Services.YunionWebhookAuth
 	Command := []string{
 		"/k8s-keystone-auth",
+		"--debug",
 	}
 
 	CommandArgs := map[string]string{
