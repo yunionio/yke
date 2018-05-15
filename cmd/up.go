@@ -125,7 +125,7 @@ func ClusterUp(
 		return APIURL, caCrt, clientCert, clientKey, nil, err
 	}
 
-	err = cluster.ConfigureCluster(ctx, kubeCluster.KubernetesEngineConfig, kubeCluster.Certificates, clusterFilePath, configDir, k8sWrapTransport, false)
+	err = kubeCluster.ConfigureCluster(ctx, clusterFilePath, configDir, k8sWrapTransport, false)
 	if err != nil {
 		return APIURL, caCrt, clientCert, clientKey, nil, err
 	}

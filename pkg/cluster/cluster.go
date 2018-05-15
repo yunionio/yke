@@ -313,7 +313,6 @@ func (c *Cluster) PrePullK8sImages(ctx context.Context) error {
 	log.Infof("Pre-pulling kubernetes images")
 	var errgrp errgroup.Group
 	hosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
-	log.Errorf("Get unique host: %#v", hosts)
 	for _, host := range hosts {
 		//if !host.UpdateWorker {
 		//continue
@@ -386,25 +385,21 @@ func (c *Cluster) DeployWorkerPlane(ctx context.Context) error {
 	return nil
 }
 
-func ConfigureCluster(
+func (c *Cluster) AllHosts() []*hosts.Host {
+	return hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
+}
+
+func (c *Cluster) ConfigureCluster(
 	ctx context.Context,
-	config types.KubernetesEngineConfig,
-	crtBundle map[string]pki.CertificatePKI,
 	clusterFilePath, configDir string,
 	k8sWrapTransport k8s.WrapTransport,
 	useKubectl bool) error {
-	// dialer factories are not needed here since we are not uses docker only k8s jobs
-	kubeCluster, err := ParseCluster(ctx, &config, clusterFilePath, configDir, nil, nil, k8sWrapTransport)
-	if err != nil {
-		return err
-	}
-	kubeCluster.UseKubectlDeploy = useKubectl
-	if len(kubeCluster.ControlPlaneHosts) > 0 {
-		kubeCluster.Certificates = crtBundle
-		if err := kubeCluster.deployNetworkPlugin(ctx); err != nil {
+	c.UseKubectlDeploy = useKubectl
+	if len(c.ControlPlaneHosts) > 0 {
+		if err := c.deployNetworkPlugin(ctx); err != nil {
 			return err
 		}
-		return kubeCluster.deployAddons(ctx)
+		return c.deployAddons(ctx)
 	}
 	return nil
 }

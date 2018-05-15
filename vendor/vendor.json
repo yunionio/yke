@@ -46,6 +46,12 @@
 			"revisionTime": "2018-01-08T23:09:05Z"
 		},
 		{
+			"checksumSHA1": "dthMvqSLmPflEvl3dFd48c78wZc=",
+			"path": "github.com/cosiner/socker",
+			"revision": "cca2f580b4d663db1623a4365e5cb849dc48855f",
+			"revisionTime": "2017-11-22T05:32:09Z"
+		},
+		{
 			"checksumSHA1": "Gj+xR1VgFKKmFXYOJMnAczC3Znk=",
 			"origin": "github.com/docker/docker/vendor/github.com/docker/distribution/digestset",
 			"path": "github.com/docker/distribution/digestset",
@@ -287,6 +293,12 @@
 			"revisionTime": "2017-12-12T10:52:41Z"
 		},
 		{
+			"checksumSHA1": "EpvNqx0QWzG0qXqgOUjhPxYRUpA=",
+			"path": "github.com/kr/fs",
+			"revision": "1455def202f6e05b95cc7bfc7e8ae67ae5141eba",
+			"revisionTime": "2018-05-06T03:17:01Z"
+		},
+		{
 			"checksumSHA1": "XEV3BI3nHA/rNa/tIgB7fVCrDww=",
 			"origin": "yunion.io/yunioncloud/vendor/github.com/mattn/go-colorable",
 			"path": "github.com/mattn/go-colorable",
@@ -334,6 +346,12 @@
 			"path": "github.com/pkg/errors",
 			"revision": "ed7b6428c133e7c59404251a09b7d6b02fa83cc2",
 			"revisionTime": "2018-03-27T12:31:50Z"
+		},
+		{
+			"checksumSHA1": "bffH9450hX0Tfeur22ql1herOCo=",
+			"path": "github.com/pkg/sftp",
+			"revision": "d2aa419835609d317c34baae11bc345d1f9971a7",
+			"revisionTime": "2018-05-11T21:26:11Z"
 		},
 		{
 			"checksumSHA1": "ySaT8G3I3y4MmnoXOYAAX0rC+p8=",

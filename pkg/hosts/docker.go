@@ -22,6 +22,7 @@ func (h *Host) WriteHostFile(ctx context.Context, contName, absPath, content, al
 	if err := docker.DoRemoveContainer(ctx, h.DClient, contName, h.Address); err != nil {
 		return err
 	}
+	log.Warningf("====remove sucess: %s", contName)
 	containerEnv := []string{ConfigEnv + "=" + content}
 	imageCfg := &container.Config{
 		Image: alpineImage,

@@ -1,5 +1,22 @@
 package templates
 
+const YunionHostAgentSystemdTemplate = `
+[Unit]
+Description=Yunion Cloud Host CNI Agent
+Documentation=http://doc.yunionyun.com
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/cni/bin/yunion-host-agent
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+`
+
 const YunionCNITemplate = `
 {{if eq .RBACConfig "rbac"}}
 ---
