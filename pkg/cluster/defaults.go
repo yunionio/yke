@@ -117,6 +117,7 @@ func (c *Cluster) setClusterServicesDefaults() {
 		&c.Services.Kubelet.Image:                        c.SystemImages.Kubernetes,
 		&c.Services.Kubeproxy.Image:                      c.SystemImages.Kubernetes,
 		&c.Services.Etcd.Image:                           c.SystemImages.Etcd,
+		&c.Services.YunionWebhookAuth.Image:              c.SystemImages.YunionK8sKeystoneAuth,
 	}
 	for k, v := range serviceConfigDefaultsMap {
 		setDefaultIfEmpty(k, v)
@@ -144,6 +145,7 @@ func (c *Cluster) setClusterImageDefaults() {
 		&c.SystemImages.YunionCNI:                 imageDefaults.YunionCNI,
 		&c.SystemImages.Ingress:                   imageDefaults.Ingress,
 		&c.SystemImages.IngressBackend:            imageDefaults.IngressBackend,
+		&c.SystemImages.YunionK8sKeystoneAuth:     imageDefaults.YunionK8sKeystoneAuth,
 	}
 
 	for k, v := range systemImagesDefaultsMap {

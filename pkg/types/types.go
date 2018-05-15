@@ -34,7 +34,7 @@ type KubernetesEngineConfig struct {
 	// Cloud Provider options
 	CloudProvider CloudProvider `yaml:"cloud_provider" json:"cloudProvider,omitempty"`
 	// WebhookConfig options
-	WebhookConfigFile string `yaml:"webhook_config_file" json:"webhookConfigFile"`
+	WebhookAuth WebhookAuth `yaml:"webhook_auth" json:"webhookAuth"`
 }
 
 type PrivateRegistry struct {
@@ -69,6 +69,8 @@ type SystemImages struct {
 	Kubernetes string `yaml:"kubernetes" json:"kubernetes,omitempty"`
 	// Yunion CNI image
 	YunionCNI string `yaml:"yunion_cni" json:"yunionCni,omitempty"`
+	/// Yunion k8s keystone WebhookAuth image
+	YunionK8sKeystoneAuth string `yaml:"yunion_k8s_keystone_auth" json:"yunionK8sKeystoneAuth,omitempty"`
 	// Pod infra container image
 	PodInfraContainer string `yaml:"pod_infra_container" json:"podInfraContainer,omitempty"`
 	// Ingress Controller image
@@ -127,6 +129,19 @@ type ConfigServices struct {
 	Kubelet KubeletService `yaml:"kubelet" json:"kubelet,omitempty"`
 	// KubeProxy Service
 	Kubeproxy KubeproxyService `yaml:"kubeproxy" json:"kubeproxy,omitempty"`
+
+	// YunionWebhookAuth Service
+	YunionWebhookAuth YunionWebhookAuthService `yaml:"yunion-webhook-auth" json:"yunionWebhookAuth"`
+}
+
+type YunionWebhookAuthService struct {
+	// Base service properties
+	BaseService   `yaml:",inline" json:",inline"`
+	OsAuthURL     string `yaml:"os_auth_url" json:"osAuthURL"`
+	OsUsername    string `yaml:"os_username" json:"osUsername"`
+	OsPassword    string `yaml:"os_password" json:"osPassword"`
+	OsProjectName string `yaml:"os_project_name" json:"osProjectName"`
+	OsRegionName  string `yaml:"os_region_name" json:"osRegionName"`
 }
 
 type ETCDService struct {
@@ -217,6 +232,11 @@ type AuthzConfig struct {
 	Mode string `yaml:"mode" json:"mode,omitempty"`
 	// Authorization mode options
 	Options map[string]string `yaml:"options" json:"options,omitempty"`
+}
+
+type WebhookAuth struct {
+	URL           string `yaml:"url" json:"url,omitempty"`
+	UseYunionAuth bool   `yaml:"use_yunion_auth" json:"useYunionAuth,omitempty"`
 }
 
 type IngressConfig struct {

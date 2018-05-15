@@ -150,19 +150,19 @@ func clusterUpFromCli(ctx *cli.Context) error {
 	}
 	clusterFilePath = filePath
 
-	rkeConfig, err := cluster.ParseConfig(clusterFile)
+	config, err := cluster.ParseConfig(clusterFile)
 	if err != nil {
 		return fmt.Errorf("Failed to parse cluster file: %v", err)
 	}
 
-	rkeConfig, err = setOptionsFromCLI(ctx, rkeConfig)
+	config, err = setOptionsFromCLI(ctx, config)
 	if err != nil {
 		return err
 	}
 	updateOnly := ctx.Bool("update-only")
 	disablePortCheck := ctx.Bool("disable-port-check")
 
-	_, _, _, _, _, err = ClusterUp(context.Background(), rkeConfig, nil, nil, nil, false, "", updateOnly, disablePortCheck)
+	_, _, _, _, _, err = ClusterUp(context.Background(), config, nil, nil, nil, false, "", updateOnly, disablePortCheck)
 	return err
 }
 

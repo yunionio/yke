@@ -539,6 +539,45 @@ func (c *Cluster) BuildEtcdProcess(host *hosts.Host, etcdHosts []*hosts.Host) ty
 	}
 }
 
+func (c *Cluster) BuildYunionWebhookProcess() types.Process {
+	s := c.Services.YunionWebhookAuth
+	Command := []string{
+		"/k8s-keystone-auth",
+	}
+
+	CommandArgs := map[string]string{
+		"kube-config":     "/etc/kubernetes/kube_config_cluster.yml",
+		"os-auth-url":     s.OsAuthURL,
+		"os-username":     s.OsUsername,
+		"os-password":     s.OsPassword,
+		"os-project-name": s.OsProjectName,
+		"os-region-name":  s.OsRegionName,
+	}
+
+	for arg, value := range CommandArgs {
+		cmd := fmt.Sprintf("--%s", arg)
+		Command = append(Command, cmd, value)
+	}
+
+	VolumesFrom := []string{
+		services.SidekickContainerName,
+	}
+
+	Binds := []string{
+		"/etc/kubernetes:/etc/kubernetes:z",
+	}
+
+	return types.Process{
+		Name:          services.YunionWebhookContainerName,
+		Command:       Command,
+		VolumesFrom:   VolumesFrom,
+		Binds:         Binds,
+		NetworkMode:   "host",
+		RestartPolicy: "always",
+		Image:         c.Services.YunionWebhookAuth.Image,
+	}
+}
+
 func BuildPortChecksFromPortList(host *hosts.Host, portList []string, proto string) []types.PortCheck {
 	portChecks := []types.PortCheck{}
 	for _, port := range portList {

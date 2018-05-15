@@ -13,7 +13,15 @@ import (
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/k8s"
 	"yunion.io/yke/pkg/pki"
+	"yunion.io/yke/pkg/types"
 	"yunion.io/yunioncloud/pkg/log"
+)
+
+const (
+	KubeAdminConfigDeployer = "kubeadmin-config-deployer"
+	KubeAdminConfigPath     = "/etc/kubernetes/kube_config_cluster.yml"
+	KubeAdminServiceName    = "kubeadmin"
+	KubeAdminConfigEnv      = "YKE_KUBEADMIN_CONFIG"
 )
 
 func SetUpAuthentication(ctx context.Context, kubeCluster, currentCluster *Cluster) error {
@@ -175,4 +183,21 @@ func saveCertToKubernetes(kubeClient *kubernetes.Clientset, crtName string, crt 
 	case <-time.After(time.Second * KubernetesClientTimeOut):
 		return fmt.Errorf("[certificates] Timeout waiting for kubernetes to be ready")
 	}
+}
+
+func deployAdminConfig(ctx context.Context, uniqueHosts []*hosts.Host, kubeAdminConfig string, alpineImage string, prsMap map[string]types.PrivateRegistry) error {
+	if len(kubeAdminConfig) == 0 {
+		return nil
+	}
+	for _, host := range uniqueHosts {
+		log.Debugf("Deploying admin kubeconfig to host [%s]", host.Address)
+		if err := doDeployAdminConfig(ctx, host, kubeAdminConfig, alpineImage, prsMap); err != nil {
+			return fmt.Errorf("Failed to deploy admin kubeconfig on node [%s]: %v", host.Address, err)
+		}
+	}
+	return nil
+}
+
+func doDeployAdminConfig(ctx context.Context, host *hosts.Host, kubeAdminConfig string, alpineImage string, prsMap map[string]types.PrivateRegistry) error {
+	return host.WriteHostFile(ctx, KubeAdminConfigDeployer, KubeAdminConfigPath, kubeAdminConfig, alpineImage, prsMap)
 }

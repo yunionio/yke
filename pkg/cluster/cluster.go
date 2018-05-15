@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"strconv"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"yunion.io/yke/pkg/k8s"
 	"yunion.io/yke/pkg/pki"
 	"yunion.io/yke/pkg/services"
+	"yunion.io/yke/pkg/templates"
 	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
 	"yunion.io/yunioncloud/pkg/log"
@@ -95,6 +95,11 @@ func ParseCluster(
 		return nil, fmt.Errorf("Failed to classify hosts from config file: %v", err)
 	}
 
+	// parse WebhookConfig
+	if err := c.parseWebhookConfig(ctx); err != nil {
+		return nil, fmt.Errorf("Failed to parse webhook config: %v", err)
+	}
+
 	if err := c.ValidateCluster(); err != nil {
 		return nil, fmt.Errorf("Failed to validate cluster: %v", err)
 	}
@@ -122,11 +127,6 @@ func ParseCluster(
 		return nil, fmt.Errorf("Failed to parse cloud config file: %v", err)
 	}
 
-	// parse the cluster webhhok auth file
-	c.WebhookConfig, err = c.parseWebhookConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to parse webhook config file: %v", err)
-	}
 	return c, nil
 }
 
@@ -194,16 +194,19 @@ func (c *Cluster) parseCloudConfig(ctx context.Context) (string, error) {
 	return string(jsonString), nil
 }
 
-func (c *Cluster) parseWebhookConfig(ctx context.Context) (string, error) {
-	if c.WebhookConfigFile == "" {
-		return "", nil
+func (c *Cluster) parseWebhookConfig(ctx context.Context) error {
+	if c.WebhookAuth.URL == "" {
+		return nil
 	}
 
-	bs, err := ioutil.ReadFile(c.WebhookConfigFile)
+	config, err := templates.CompileTemplateFromMap(templates.WebhookAuthTemplate, map[string]string{
+		"URL": c.WebhookAuth.URL,
+	})
 	if err != nil {
-		return "", fmt.Errorf("Read WebhhokConfigFile error: %v", err)
+		return fmt.Errorf("Generate webhook auth config error: %v", err)
 	}
-	return string(bs), nil
+	c.WebhookConfig = config
+	return nil
 }
 
 func isLocalConfigWorking(ctx context.Context, localKubeConfigPath string, k8sWrapTransport k8s.WrapTransport) bool {
@@ -342,6 +345,7 @@ func (c *Cluster) DeployControlPlane(ctx context.Context) error {
 		services.KubeAPIContainerName:        c.BuildKubeAPIProcess(),
 		services.KubeControllerContainerName: c.BuildKubeControllerProcess(),
 		services.SchedulerContainerName:      c.BuildSchedulerProcess(),
+		services.YunionWebhookContainerName:  c.BuildYunionWebhookProcess(),
 	}
 	if err := services.RunControlPlane(ctx, c.ControlPlaneHosts,
 		c.LocalConnDialerFactory,
