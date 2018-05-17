@@ -30,3 +30,5 @@ _output
 bin
 .idea
 .ropeproject
+build
+*.rpm

@@ -18,3 +18,6 @@ bin: clean
 
 clean:
 	rm -rf bin
+
+rpm: bin
+	./tools/rpm-maker

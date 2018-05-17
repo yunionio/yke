@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -o errexit
+
+cd $(dirname $(dirname $(readlink -f "$BASH_SOURCE")))
+
+TAG=$(git describe --abbrev=0 --tags)
+VERSION=${TAG/\//-}
+VERSION=${VERSION/v/}
+RELEASE=`date +"%y%m%d%H"`
+
+rpm_root="build/rpm"
+bin_dir="/opt/yunion/bin"
+rpm_bin_dir="$rpm_root/$bin_dir"
+
+do_build() {
+    local pkg_name="$1"
+    local version="$2"
+    local release="$3"
+    docker run -v $(pwd):/data zexi/fpm-rpm \
+        fpm -s dir -t rpm -C /data/build/rpm \
+        --package /data/ \
+        --version $version --iteration $release --name $pkg_name \
+        --architecture amd64 --maintainer "Zexi Li" --vendor "Yunion"
+}
+
+echo "Start make yke package"
+mkdir -p $rpm_bin_dir
+cp -a bin/yke $rpm_bin_dir
+do_build yunion-yke $VERSION $RELEASE
