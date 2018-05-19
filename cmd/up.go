@@ -37,6 +37,14 @@ func UpCommand() cli.Command {
 			Name:  "disable-port-check",
 			Usage: "Disable port check validation between nodes",
 		},
+		cli.BoolFlag{
+			Name:  "disable-kube-dns",
+			Usage: "Disable deploy kube-dns",
+		},
+		cli.BoolFlag{
+			Name:  "disable-ingress-controller",
+			Usage: "Disable deploy default nginx ingress controller",
+		},
 	}
 
 	upFlags = append(upFlags, sshCliOptions...)
@@ -140,6 +148,13 @@ func ClusterUp(
 	return APIURL, caCrt, clientCert, clientKey, kubeCluster.Certificates, nil
 }
 
+func backgroudContext(ctx *cli.Context) context.Context {
+	bgCtx := context.Background()
+	bgCtx = context.WithValue(bgCtx, "disable-kube-dns", ctx.Bool("disable-kube-dns"))
+	bgCtx = context.WithValue(bgCtx, "disable-ingress-controller", ctx.Bool("disable-ingress-controller"))
+	return bgCtx
+}
+
 func clusterUpFromCli(ctx *cli.Context) error {
 	if ctx.Bool("local") {
 		return clusterUpLocal(ctx)
@@ -162,7 +177,7 @@ func clusterUpFromCli(ctx *cli.Context) error {
 	updateOnly := ctx.Bool("update-only")
 	disablePortCheck := ctx.Bool("disable-port-check")
 
-	_, _, _, _, _, err = ClusterUp(context.Background(), config, nil, nil, nil, false, "", updateOnly, disablePortCheck)
+	_, _, _, _, _, err = ClusterUp(backgroudContext(ctx), config, nil, nil, nil, false, "", updateOnly, disablePortCheck)
 	return err
 }
 
@@ -180,6 +195,6 @@ func clusterUpLocal(ctx *cli.Context) error {
 		}
 		config.Nodes = []types.ConfigNode{*cluster.GetLocalNodeConfig()}
 	}
-	_, _, _, _, _, err = ClusterUp(context.Background(), config, nil, tunnel.LocalHealthcheckFactory, nil, true, "", false, false)
+	_, _, _, _, _, err = ClusterUp(backgroudContext(ctx), config, nil, tunnel.LocalHealthcheckFactory, nil, true, "", false, false)
 	return err
 }
