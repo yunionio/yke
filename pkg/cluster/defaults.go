@@ -12,11 +12,12 @@ import (
 
 const (
 	DefaultServiceClusterIPRange = "10.43.0.0/16"
-	DefaultClusterCIDR           = "10.42.0.0/16"
-	DefaultClusterDNSService     = "10.43.0.10"
-	DefaultClusterDomain         = "cluster.local"
-	DefaultClusterName           = "local"
-	DefaultClusterSSHKeyPath     = "~/.ssh/id_rsa"
+	//DefaultClusterCIDR           = "10.42.0.0/16"
+	DefaultClusterCIDR       = "10.43.0.0/16"
+	DefaultClusterDNSService = "10.43.0.10"
+	DefaultClusterDomain     = "cluster.local"
+	DefaultClusterName       = "local"
+	DefaultClusterSSHKeyPath = "~/.ssh/id_rsa"
 
 	DefaultK8sVersion = types.K8sV18
 
