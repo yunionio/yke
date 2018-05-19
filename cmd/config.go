@@ -23,18 +23,10 @@ import (
 const (
 	comments = `# If you intened to deploy Kubernetes in an air-gapped environment,
 # please consult the documentation on how to configure custom YKE images.`
-	masterRole = "master"
-	etcdRole   = "etcd"
-	workerRole = "worker"
 )
 
 var (
-	roleSets     sets.String       = sets.NewString(masterRole, etcdRole, workerRole)
-	rolePlaneMap map[string]string = map[string]string{
-		masterRole: services.ControlRole,
-		etcdRole:   services.ETCDRole,
-		workerRole: services.WorkerRole,
-	}
+	roleSets sets.String = sets.NewString(services.ControlRole, services.ETCDRole, services.WorkerRole)
 )
 
 func ConfigCommand() cli.Command {
@@ -58,7 +50,7 @@ func ConfigCommand() cli.Command {
 			},
 			cli.StringFlag{
 				Name:  "topo,t",
-				Usage: "Cluster topo like: master:10.168.26.183/etcd:10.168.26.183/worker:10.168.26.183,10.168.26.184",
+				Usage: "Cluster topo like: controlplane:10.168.26.183/etcd:10.168.26.183/worker:10.168.26.183,10.168.26.184",
 			},
 			cli.StringFlag{
 				Name:  "user,u",
@@ -106,6 +98,11 @@ func ConfigCommand() cli.Command {
 				Name:   "os-region-name",
 				Usage:  "Yunion region name",
 				EnvVar: "OS_REGION_NAME",
+			},
+			cli.StringFlag{
+				Name:  "yunion-cni-bridge",
+				Usage: "Yunion cni plugin ovs bridge",
+				Value: "br0",
 			},
 		},
 	}
@@ -294,11 +291,11 @@ func directlyTopoConfig(ctx *cli.Context, configFile string, print bool) error {
 		OsRegionName:  region,
 	}
 	yunionWebhookConfig := parseYunionWebhookAuthConfig(ctx, yunionAuthOpt)
-	setTopoConfigDefaults(&c, yunionWebhookConfig)
+	setTopoConfigDefaults(ctx, &c, yunionWebhookConfig)
 	return writeConfig(&c, configFile, print)
 }
 
-func setTopoConfigDefaults(c *types.KubernetesEngineConfig, yunionWebhookAuth *YunionWebhookAuthConfig) {
+func setTopoConfigDefaults(ctx *cli.Context, c *types.KubernetesEngineConfig, yunionWebhookAuth *YunionWebhookAuthConfig) {
 	c.Network = types.NetworkConfig{Plugin: cluster.DefaultNetworkPlugin}
 	c.Authorization = types.AuthzConfig{Mode: cluster.DefaultAuthorizationMode}
 
@@ -332,22 +329,20 @@ func setTopoConfigDefaults(c *types.KubernetesEngineConfig, yunionWebhookAuth *Y
 			Image: imageDefaults.Kubernetes,
 		},
 	}
-	if yunionWebhookAuth != nil {
-		servicesConfig.YunionWebhookAuth = types.YunionWebhookAuthService{
-			BaseService: types.BaseService{
-				Image: imageDefaults.YunionK8sKeystoneAuth,
-			},
-			OsAuthURL:     yunionWebhookAuth.OsAuthURL,
-			OsUsername:    yunionWebhookAuth.OsUsername,
-			OsPassword:    yunionWebhookAuth.OsPassword,
-			OsProjectName: yunionWebhookAuth.OsProjectName,
-			OsRegionName:  yunionWebhookAuth.OsRegionName,
-		}
-		c.WebhookAuth.URL = yunionWebhookAuth.URL
-		c.WebhookAuth.UseYunionAuth = true
-		servicesConfig.KubeAPI.ExtraArgs = map[string]string{
-			"authentication-token-webhook-config-file": "/etc/kubernetes/webhook.kubeconfig",
-		}
+	servicesConfig.YunionWebhookAuth = types.YunionWebhookAuthService{
+		BaseService: types.BaseService{
+			Image: imageDefaults.YunionK8sKeystoneAuth,
+		},
+		OsAuthURL:     yunionWebhookAuth.OsAuthURL,
+		OsUsername:    yunionWebhookAuth.OsUsername,
+		OsPassword:    yunionWebhookAuth.OsPassword,
+		OsProjectName: yunionWebhookAuth.OsProjectName,
+		OsRegionName:  yunionWebhookAuth.OsRegionName,
+	}
+	c.WebhookAuth.URL = yunionWebhookAuth.URL
+	c.WebhookAuth.UseYunionAuth = true
+	servicesConfig.KubeAPI.ExtraArgs = map[string]string{
+		"authentication-token-webhook-config-file": "/etc/kubernetes/webhook.kubeconfig",
 	}
 	servicesConfig.Kubelet.ClusterDomain = cluster.DefaultClusterDomain
 	servicesConfig.KubeAPI.ServiceClusterIPRange = cluster.DefaultServiceClusterIPRange
@@ -358,6 +353,16 @@ func setTopoConfigDefaults(c *types.KubernetesEngineConfig, yunionWebhookAuth *Y
 	servicesConfig.Kubelet.InfraContainerImage = imageDefaults.PodInfraContainer
 
 	c.Services = servicesConfig
+
+	// Yunion CNI options
+	c.Network.Options = map[string]string{
+		cluster.YunionBridge:       ctx.String("yunion-cni-bridge"),
+		cluster.YunionAuthURL:      yunionWebhookAuth.OsAuthURL,
+		cluster.YunionAdminUser:    yunionWebhookAuth.OsUsername,
+		cluster.YunionAdminPasswd:  yunionWebhookAuth.OsPassword,
+		cluster.YunionAdminProject: yunionWebhookAuth.OsProjectName,
+		cluster.YunionRegion:       yunionWebhookAuth.OsRegionName,
+	}
 }
 
 func clusterConfig(ctx *cli.Context) error {
