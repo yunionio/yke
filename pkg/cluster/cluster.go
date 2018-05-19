@@ -152,7 +152,10 @@ func rebuildLocalAdminConfig(ctx context.Context, kubeCluster *Cluster) error {
 			newConfig = pki.GetKubeConfigX509WithData(kubeURL, kubeCluster.ClusterName, pki.KubeAdminCertName, caData, crtData, keyData)
 		}
 		if err := pki.DeployAdminConfig(ctx, newConfig, kubeCluster.LocalKubeConfigPath); err != nil {
-			return fmt.Errorf("Failed to redeploy local admin config with new host")
+			return fmt.Errorf("Failed to redeploy local admin config with new host: %v", err)
+		}
+		if err := deployAdminConfig(ctx, kubeCluster.AllHosts(), newConfig, kubeCluster.SystemImages.Alpine, kubeCluster.PrivateRegistriesMap); err != nil {
+			return fmt.Errorf("Failed to redeploy admin config to remote host: %v", err)
 		}
 		workingConfig = newConfig
 		if _, err := GetK8sVersion(kubeCluster.LocalKubeConfigPath, kubeCluster.K8sWrapTransport); err == nil {
