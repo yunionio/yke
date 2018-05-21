@@ -342,6 +342,7 @@ func (c *Cluster) BuildKubeProxyProcess() types.Process {
 		"v": "2",
 		"healthz-bind-address": "0.0.0.0",
 		"kubeconfig":           pki.GetConfigPath(pki.KubeProxyCertName),
+		"cluster-cidr":         c.ClusterCIDR,
 	}
 
 	VolumesFrom := []string{

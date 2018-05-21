@@ -186,7 +186,7 @@ func (c *Cluster) doAddonDeploy(ctx context.Context, addonYaml, resourceName str
 		return fmt.Errorf("Failed to save addon ConfigMap: %v", err)
 	}
 
-	log.Infof("[addons] Executing deploy job..")
+	log.Infof("[addons] Executing deploy job [%s] ...", resourceName)
 	k8sClient, err := k8s.NewClient(c.LocalKubeConfigPath, c.K8sWrapTransport)
 	if err != nil {
 		return err
