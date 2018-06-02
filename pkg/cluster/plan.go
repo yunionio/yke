@@ -295,8 +295,6 @@ func (c *Cluster) BuildKubeletProcess(host *hosts.Host) types.Process {
 		"/var/log/pods:/var/log/pods:z",
 		"/opt/cloud/workspace/servers/hostinfo:/opt/cloud/workspace/servers/hostinfo:ro",
 		"/lib/modules:/lib/modules:z",
-		"/usr/bin/ovs-vsctl:/usr/bin/ovs-vsctl",
-		"/usr/bin/ovs-ofctl:/usr/bin/ovs-ofctl",
 	}
 
 	for arg, value := range c.Services.Kubelet.ExtraArgs {
