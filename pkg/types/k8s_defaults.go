@@ -77,7 +77,7 @@ var (
 		Grafana:                   "rancher/heapster-grafana-amd64:v4.4.3",
 		Heapster:                  "rancher/heapster-amd64:v1.5.0",
 		Influxdb:                  "rancher/heapster-influxdb-amd64:v1.3.3",
-		Tiller:                    "rancher/tiller:v2.8.2",
+		Tiller:                    "zexi/tiller:v2.9.0",
 		Dashboard:                 "rancher/kubernetes-dashboard-amd64:v1.8.3",
 	}
 )
