@@ -13,7 +13,7 @@ const (
 	DockerDialerTimeout = 30
 )
 
-type dialFunc func(network, address string) (net.Conn, error)
+type DialFunc func(network, address string) (net.Conn, error)
 
 type HostConfig struct {
 	Address         string
@@ -26,7 +26,7 @@ type HostConfig struct {
 	DockerSocket    string
 }
 
-type DialerFactory func(h HostConfig) (dialFunc, error)
+type DialerFactory func(h HostConfig) (DialFunc, error)
 
 type dialer struct {
 	signer          ssh.Signer
@@ -107,12 +107,12 @@ func (d *dialer) DialLocalConn(network, addr string) (net.Conn, error) {
 	return d.Dial(network, addr)
 }
 
-func SSHFactory(h HostConfig) (dialFunc, error) {
+func SSHFactory(h HostConfig) (DialFunc, error) {
 	d, err := newDialer(h, "docker")
 	return d.Dial, err
 }
 
-func LocalConnFactory(h HostConfig) (dialFunc, error) {
+func LocalConnFactory(h HostConfig) (DialFunc, error) {
 	d, err := newDialer(h, "network")
 	return d.Dial, err
 }

@@ -143,7 +143,7 @@ func getAddonFromURL(yamlURL string) ([]byte, error) {
 }
 
 func (c *Cluster) deployKubeDNS(ctx context.Context) error {
-	if ctx.Value("disable-kube-dns").(bool) {
+	if disableDns := ctx.Value("disable-kube-dns"); disableDns != nil && disableDns.(bool) {
 		log.Infof("[KubeDNS] disable-kube-dns is specified, skipping deploy it")
 		return nil
 	}
@@ -244,7 +244,7 @@ func (c *Cluster) ApplySystemAddonExcuteJob(addonJob string) error {
 }
 
 func (c *Cluster) deployIngress(ctx context.Context) error {
-	if ctx.Value("disable-ingress-controller").(bool) {
+	if disableIngress := ctx.Value("disable-ingress-controller"); disableIngress != nil && disableIngress.(bool) {
 		log.Infof("[ingress] disable-ingress-controller is specified, skipping deploy")
 		return nil
 	}

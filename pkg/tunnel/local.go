@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-func LocalHealthcheckFactory(h HostConfig) (dialFunc, error) {
+func LocalHealthcheckFactory(h HostConfig) (DialFunc, error) {
 	dialer, err := newDialer(h, "health")
 	return dialer.DialHealthcheckLocally, err
 }
