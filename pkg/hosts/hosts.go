@@ -50,6 +50,7 @@ type Host struct {
 
 func (h *Host) TunnelHostConfig() tunnel.HostConfig {
 	return tunnel.HostConfig{
+		NodeName:     h.NodeName,
 		Address:      h.Address,
 		Port:         h.Port,
 		Username:     h.User,

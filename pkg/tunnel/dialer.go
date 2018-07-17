@@ -16,6 +16,7 @@ const (
 type DialFunc func(network, address string) (net.Conn, error)
 
 type HostConfig struct {
+	NodeName        string
 	Address         string
 	Port            string
 	Username        string
