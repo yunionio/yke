@@ -123,27 +123,6 @@ func (c *Cluster) doYunionDeploy(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Deploy yunion cni container: %v", err)
 	}
-	return c.doYunionCNIHostAgentDeploy(ctx)
-}
-
-func (c *Cluster) doYunionCNIHostAgentDeploy(ctx context.Context) error {
-	hostAgentService := "yunion-host-agent"
-	deployer := fmt.Sprintf("%s-deployer", hostAgentService)
-	systemdPath := fmt.Sprintf("/etc/systemd/system/%s.service", hostAgentService)
-	content, err := templates.CompileTemplateFromMap(templates.YunionHostAgentSystemdTemplate, map[string]string{})
-	if err != nil {
-		return fmt.Errorf("Compile template: %v", err)
-	}
-	for _, host := range c.AllHosts() {
-		err = host.WriteHostFile(ctx, deployer, systemdPath, content, c.SystemImages.Alpine, c.PrivateRegistriesMap)
-		if err != nil {
-			return fmt.Errorf("Write %s: %v", systemdPath, err)
-		}
-		ret, err := host.Rcmd(fmt.Sprintf("sudo systemctl enable %s && sudo systemctl start %s", hostAgentService, hostAgentService))
-		if err != nil {
-			return fmt.Errorf("%s enable systemd service: %v, %q", hostAgentService, err, ret)
-		}
-	}
 	return nil
 }
 

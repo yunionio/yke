@@ -349,7 +349,6 @@ func (c *Cluster) DeployControlPlane(ctx context.Context) error {
 		services.KubeAPIContainerName:        c.BuildKubeAPIProcess(),
 		services.KubeControllerContainerName: c.BuildKubeControllerProcess(),
 		services.SchedulerContainerName:      c.BuildSchedulerProcess(),
-		services.YunionWebhookContainerName:  c.BuildYunionWebhookProcess(),
 	}
 	if err := services.RunControlPlane(ctx, c.ControlPlaneHosts,
 		c.LocalConnDialerFactory,

@@ -340,7 +340,6 @@ func setTopoConfigDefaults(ctx *cli.Context, c *types.KubernetesEngineConfig, yu
 		OsRegionName:  yunionWebhookAuth.OsRegionName,
 	}
 	c.WebhookAuth.URL = yunionWebhookAuth.URL
-	c.WebhookAuth.UseYunionAuth = true
 	servicesConfig.KubeAPI.ExtraArgs = map[string]string{
 		"authentication-token-webhook-config-file": "/etc/kubernetes/webhook.kubeconfig",
 	}
