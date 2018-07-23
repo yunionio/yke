@@ -30,7 +30,6 @@ const (
 	SidekickContainerName       = "service-sidekick"
 	LogLinkContainerName        = "log-linker"
 	LogCleanerContainerName     = "log-cleaner"
-	YunionWebhookContainerName  = "yunion-webhook-auth"
 
 	KubeAPIPort        = 6443
 	SchedulerPort      = 10251

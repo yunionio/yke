@@ -214,8 +214,6 @@ type NetworkConfig struct {
 	Plugin string `yaml:"plugin" json:"plugin"`
 	// Plugin options to configure network properties
 	Options map[string]string `yaml:"options" json:"options"`
-	// YunionNetworkProvider
-	YunionNetworkProvider *YunionNetworkProvider `yaml:"" json:"yunionNetworkProvider"`
 }
 
 type AuthnConfig struct {
@@ -235,8 +233,7 @@ type AuthzConfig struct {
 }
 
 type WebhookAuth struct {
-	URL           string `yaml:"url" json:"url"`
-	UseYunionAuth bool   `yaml:"use_yunion_auth" json:"useYunionAuth"`
+	URL string `yaml:"url" json:"url"`
 }
 
 type IngressConfig struct {
@@ -321,7 +318,4 @@ type CloudProvider struct {
 	Name string `yaml:"name" json:"name"`
 	// Configuration Options of Cloud Provider
 	CloudConfig map[string]string `yaml:"cloud_config" json:"cloudConfig"`
-}
-
-type YunionNetworkProvider struct {
 }

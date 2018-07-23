@@ -49,11 +49,6 @@ func RemoveControlPlane(ctx context.Context, controlHosts []*hosts.Host, force b
 			return err
 		}
 
-		// remove yunionWebhookAuth
-		if err := removeYunionWebhook(ctx, host); err != nil {
-			return err
-		}
-
 		// check if the host already is a worker
 		if host.IsWorker {
 			log.Infof("[%s] Host [%s] is already a worker host, skipping delete kubelet and kubeproxy.", ControlRole, host.Address)
@@ -98,5 +93,5 @@ func doDeployControlHost(ctx context.Context, host *hosts.Host, localConnDialerF
 	if err := runScheduler(ctx, host, localConnDialerFactory, prsMap, processMap[SchedulerContainerName], alpineImage); err != nil {
 		return err
 	}
-	return runYunionWebhook(ctx, host, localConnDialerFactory, prsMap, processMap[YunionWebhookContainerName], alpineImage)
+	return nil
 }
