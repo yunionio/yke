@@ -186,7 +186,8 @@ func RemoveContainer(ctx context.Context, dClient *client.Client, hostname, cont
 			break
 		}
 		if client.IsErrNotFound(err) {
-			log.Warningf("Remove not found container [%s] for host [%s], times: %d")
+			log.Warningf("Remove not found container [%s] for host [%s], times: %d", containerName, hostname, i+1)
+			err = nil
 			break
 		}
 		log.Errorf("Remove container [%s] for host [%s], times: %d, error: %v", containerName, hostname, i+1, err)
