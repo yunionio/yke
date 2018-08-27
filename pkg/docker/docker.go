@@ -179,7 +179,14 @@ func UseLocalOrPull(ctx context.Context, dClient *client.Client, hostname string
 }
 
 func RemoveContainer(ctx context.Context, dClient *client.Client, hostname, containerName string) error {
-	err := dClient.ContainerRemove(ctx, containerName, types.ContainerRemoveOptions{})
+	var err error
+	for i := 0; i < 3; i++ {
+		err = dClient.ContainerRemove(ctx, containerName, types.ContainerRemoveOptions{Force: true})
+		if err == nil {
+			break
+		}
+		log.Errorf("Remove container [%s] for host [%s], times: %d, error: %v", containerName, hostname, i+1, err)
+	}
 	if err != nil {
 		return fmt.Errorf("Can't remove Docker container [%s] for host [%s]: %v", containerName, hostname, err)
 	}

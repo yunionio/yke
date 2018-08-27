@@ -195,7 +195,6 @@ func FetchCertificatesFromHost(ctx context.Context, extraHosts []*hosts.Host, ho
 		return nil, err
 	}
 	return populateCertMap(tmpCerts, localConfigPath, extraHosts), nil
-
 }
 
 func fetchFileFromHost(ctx context.Context, filePath, image string, host *hosts.Host, prsMap map[string]ytypes.PrivateRegistry) (string, error) {
