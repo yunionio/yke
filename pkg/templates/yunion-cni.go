@@ -80,6 +80,7 @@ data:
         "admin_password": "{{.YunionAdminPasswd}}",
         "admin_project": "{{.YunionAdminProject}}",
         "timeout": 30,
+        "cluster": "{{.YunionKubeCluster}}",
         "region": "{{.YunionRegion}}"
       }
     }
