@@ -47,6 +47,7 @@ const (
 	YunionAdminPasswd   = "yunion_admin_passwd"
 	YunionAdminProject  = "yunion_admin_project"
 	YunionRegion        = "yunion_region"
+	YunionKubeCluster   = "yunion_kube_cluster"
 
 	// List of map keys to be used with network templates
 
@@ -114,6 +115,7 @@ func (c *Cluster) doYunionDeploy(ctx context.Context) error {
 		"YunionAdminPasswd":  c.Network.Options[YunionAdminPasswd],
 		"YunionAdminProject": c.Network.Options[YunionAdminProject],
 		"YunionRegion":       c.Network.Options[YunionRegion],
+		"YunionKubeCluster":  c.Network.Options[YunionKubeCluster],
 	}
 	pluginYaml, err := c.getNetworkPluginManifest(yunionConfig)
 	if err != nil {
