@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	EtcdHealthCheckURL = "https://127.0.0.1:2379/health"
+	EtcdDataDir = "/var/lib/rancher/etcd/"
 )
 
 func RunEtcdPlane(ctx context.Context, etcdHosts []*hosts.Host, etcdProcessHostMap map[*hosts.Host]types.Process, localConnDialerFactory tunnel.DialerFactory, prsMap map[string]types.PrivateRegistry, updateWorkersOnly bool, alpineImage string) error {

@@ -69,24 +69,24 @@ type SystemImages struct {
 	Kubernetes string `yaml:"kubernetes" json:"kubernetes"`
 	// Yunion CNI image
 	YunionCNI string `yaml:"yunion_cni" json:"yunionCni"`
-	/// Yunion k8s keystone WebhookAuth image
-	YunionK8sKeystoneAuth string `yaml:"yunion_k8s_keystone_auth" json:"yunionK8sKeystoneAuth"`
 	// Pod infra container image
 	PodInfraContainer string `yaml:"pod_infra_container" json:"podInfraContainer"`
 	// Ingress Controller image
 	Ingress string `yaml:"ingress" json:"ingress"`
 	// Ingress Controller Backend image
 	IngressBackend string `yaml:"ingress_backend" json:"ingressBackend"`
-	// Dashboard image
-	Dashboard string `yaml:"dashboard" json:"dashboard"`
-	// Heapster addon image
-	Heapster string `yaml:"heapster" json:"heapster"`
-	// Grafana image for heapster addon
-	Grafana string `yaml:"grafana" json:"grafana"`
-	// Influxdb image for heapster addon
-	Influxdb string `yaml:"influxdb" json:"influxdb"`
-	// Tiller addon image
-	Tiller string `yaml:"tiller" json:"tiller"`
+	// Metrics Server image
+	MetricsServer string `yaml:"metrics_server" json:"metricsServer,omitempty"`
+	//// Dashboard image
+	//Dashboard string `yaml:"dashboard" json:"dashboard"`
+	//// Heapster addon image
+	//Heapster string `yaml:"heapster" json:"heapster"`
+	//// Grafana image for heapster addon
+	//Grafana string `yaml:"grafana" json:"grafana"`
+	//// Influxdb image for heapster addon
+	//Influxdb string `yaml:"influxdb" json:"influxdb"`
+	//// Tiller addon image
+	//Tiller string `yaml:"tiller" json:"tiller"`
 }
 
 type ConfigNode struct {
@@ -318,4 +318,17 @@ type CloudProvider struct {
 	Name string `yaml:"name" json:"name"`
 	// Configuration Options of Cloud Provider
 	CloudConfig map[string]string `yaml:"cloud_config" json:"cloudConfig"`
+}
+
+type KubernetesServicesOptions struct {
+	// Additional options passed to KubeAPI
+	KubeAPI map[string]string `json:"kubeapi"`
+	// Additional options passed to Kubelet
+	Kubelet map[string]string `json:"kubelet"`
+	// Additional options passed to Kubeproxy
+	Kubeproxy map[string]string `json:"kubeproxy"`
+	// Additional options passed to KubeController
+	KubeController map[string]string `json:"kubeController"`
+	// Additional options passed to Scheduler
+	Scheduler map[string]string `json:"scheduler"`
 }

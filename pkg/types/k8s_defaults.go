@@ -1,83 +1,120 @@
 package types
 
+import (
+	"fmt"
+	"strings"
+
+	"yunion.io/yke/pkg/types/image"
+)
+
 const (
-	K8sV18  = "v1.8.10-rancher1-1"
-	K8sV19  = "v1.9.5-rancher1-1"
-	K8sV110 = "v1.10.0-rancher1-2"
+	DefaultK8s = "v1.11.2-rancher1-1"
 )
 
 var (
-	// K8sVersionToSystemImages
-	K8sVersionToSystemImages = map[string]SystemImages{
-		K8sV18:  v18SystemImages,
-		K8sV19:  v19SystemImages,
-		K8sV110: v110SystemImages,
+	m = image.Mirror
+
+	// K8sVersionsCurrent are the latest versions available for installation
+	K8sVersionsCurrent = []string{
+		"v1.10.5-rancher1-2",
+		"v1.11.2-rancher1-1",
 	}
 
-	// v18 system images defaults
-	v18SystemImages = SystemImages{
-		Etcd:                      "rancher/coreos-etcd:v3.0.17",
-		Kubernetes:                "rancher/k8s:" + K8sV18,
-		Alpine:                    "alpine:latest",
-		NginxProxy:                "rancher/rke-nginx-proxy:v0.1.1",
-		CertDownloader:            "zexi/yke-cert-deployer:v0.1.1",
-		KubernetesServicesSidecar: "yunion/yke-service-sidekick:v0.1.1",
-		KubeDNS:                   "rancher/k8s-dns-kube-dns-amd64:1.14.5",
-		DNSmasq:                   "rancher/k8s-dns-dnsmasq-nanny-amd64:1.14.5",
-		KubeDNSSidecar:            "rancher/k8s-dns-sidecar-amd64:1.14.5",
-		KubeDNSAutoscaler:         "rancher/cluster-proportional-autoscaler-amd64:1.0.0",
-		YunionCNI:                 "yunion/cni:v1.0.2",
-		YunionK8sKeystoneAuth:     "yunion/k8s-keystone-auth:v1.0.0",
-		PodInfraContainer:         "rancher/pause-amd64:3.0",
-		Ingress:                   "rancher/nginx-ingress-controller:0.10.2-rancher1",
-		IngressBackend:            "rancher/nginx-ingress-controller-defaultbackend:1.4",
+	// K8sVersionToSystemImages is dynamically populated on init() with the latest versions
+	K8sVersionToSystemImages map[string]SystemImages
+
+	// K8sVersionServiceOptions - service options per k8s version
+	K8sVersionServiceOptions = map[string]KubernetesServicesOptions{
+		"v1.11": {
+			KubeAPI: map[string]string{
+				"tls-cipher-suites": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
+			},
+			Kubelet: map[string]string{
+				"tls-cipher-suites": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
+			},
+		},
+		"v1.10": {
+			KubeAPI: map[string]string{
+				"tls-cipher-suites":        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
+				"endpoint-reconciler-type": "lease",
+			},
+			Kubelet: map[string]string{
+				"tls-cipher-suites": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
+			},
+		},
 	}
 
-	// v19 system images defaults
-	v19SystemImages = SystemImages{
-		Etcd:                      "rancher/coreos-etcd:v3.1.12",
-		Kubernetes:                "rancher/k8s:" + K8sV19,
-		Alpine:                    "alpine:latest",
-		NginxProxy:                "rancher/rke-nginx-proxy:v0.1.1",
-		CertDownloader:            "zexi/yke-cert-deployer:v0.1.1",
-		KubernetesServicesSidecar: "yunion/yke-service-sidekick:v0.1.1",
-		KubeDNS:                   "rancher/k8s-dns-kube-dns-amd64:1.14.7",
-		DNSmasq:                   "rancher/k8s-dns-dnsmasq-nanny-amd64:1.14.7",
-		KubeDNSSidecar:            "rancher/k8s-dns-sidecar-amd64:1.14.7",
-		KubeDNSAutoscaler:         "rancher/cluster-proportional-autoscaler-amd64:1.0.0",
-		YunionCNI:                 "yunion/cni:v1.0.2",
-		YunionK8sKeystoneAuth:     "yunion/k8s-keystone-auth:v1.0.0",
-		PodInfraContainer:         "rancher/pause-amd64:3.0",
-		Ingress:                   "rancher/nginx-ingress-controller:0.10.2-rancher1",
-		IngressBackend:            "rancher/nginx-ingress-controller-defaultbackend:1.4",
-		Grafana:                   "rancher/heapster-grafana-amd64:v4.4.3",
-		Heapster:                  "rancher/heapster-amd64:v1.5.0",
-		Influxdb:                  "rancher/heapster-influxdb-amd64:v1.3.3",
-		Tiller:                    "rancher/tiller:v2.7.2",
-		Dashboard:                 "rancher/kubernetes-dashboard-amd64:v1.8.0",
-	}
-
-	// v110 system images defaults
-	v110SystemImages = SystemImages{
-		Etcd:                      "rancher/coreos-etcd:v3.1.12",
-		Kubernetes:                "rancher/k8s:" + K8sV110,
-		Alpine:                    "alpine:latest",
-		NginxProxy:                "rancher/rke-nginx-proxy:v0.1.1",
-		CertDownloader:            "zexi/yke-cert-deployer:v0.1.1",
-		KubernetesServicesSidecar: "yunion/yke-service-sidekick:v0.1.1",
-		KubeDNS:                   "rancher/k8s-dns-kube-dns-amd64:1.14.8",
-		DNSmasq:                   "rancher/k8s-dns-dnsmasq-nanny-amd64:1.14.8",
-		KubeDNSSidecar:            "rancher/k8s-dns-sidecar-amd64:1.14.8",
-		KubeDNSAutoscaler:         "rancher/cluster-proportional-autoscaler-amd64:1.0.0",
-		YunionCNI:                 "yunion/cni:v1.0.2",
-		YunionK8sKeystoneAuth:     "yunion/k8s-keystone-auth:v1.0.0",
-		PodInfraContainer:         "rancher/pause-amd64:3.1",
-		Ingress:                   "rancher/nginx-ingress-controller:0.10.2-rancher1",
-		IngressBackend:            "rancher/nginx-ingress-controller-defaultbackend:1.4",
-		Grafana:                   "rancher/heapster-grafana-amd64:v4.4.3",
-		Heapster:                  "rancher/heapster-amd64:v1.5.0",
-		Influxdb:                  "rancher/heapster-influxdb-amd64:v1.3.3",
-		Tiller:                    "zexi/tiller:v2.9.0",
-		Dashboard:                 "rancher/kubernetes-dashboard-amd64:v1.8.3",
+	AllK8sVersions = map[string]SystemImages{
+		"v1.10.5-rancher1-2": {
+			Etcd:                      m("quay.io/coreos/etcd:v3.2.18"),
+			Kubernetes:                m("rancher/hyperkube:v1.10.5-rancher1"),
+			Alpine:                    m("yunion/yke-tools:v0.1.13"),
+			NginxProxy:                m("yunion/yke-tools:v0.1.13"),
+			CertDownloader:            m("yunion/yke-tools:v0.1.13"),
+			KubernetesServicesSidecar: m("yunion/yke-tools:v0.1.13"),
+			KubeDNS:                   m("gcr.io/google_containers/k8s-dns-kube-dns-amd64:1.14.8"),
+			DNSmasq:                   m("gcr.io/google_containers/k8s-dns-dnsmasq-nanny-amd64:1.14.8"),
+			KubeDNSSidecar:            m("gcr.io/google_containers/k8s-dns-sidecar-amd64:1.14.8"),
+			KubeDNSAutoscaler:         m("gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.0.0"),
+			YunionCNI:                 m("yunion/cni:v1.0.2"),
+			PodInfraContainer:         m("gcr.io/google_containers/pause-amd64:3.1"),
+			Ingress:                   m("rancher/nginx-ingress-controller:0.16.2-rancher1"),
+			IngressBackend:            m("k8s.gcr.io/defaultbackend:1.4"),
+			MetricsServer:             m("gcr.io/google_containers/metrics-server-amd64:v0.2.1"),
+		},
+		"v1.11.2-rancher1-1": {
+			Etcd:                      m("quay.io/coreos/etcd:v3.2.18"),
+			Kubernetes:                m("rancher/hyperkube:v1.11.2-rancher1"),
+			Alpine:                    m("yunion/yke-tools:v0.1.13"),
+			NginxProxy:                m("yunion/yke-tools:v0.1.13"),
+			CertDownloader:            m("yunion/yke-tools:v0.1.13"),
+			KubernetesServicesSidecar: m("yunion/yke-tools:v0.1.13"),
+			KubeDNS:                   m("gcr.io/google_containers/k8s-dns-kube-dns-amd64:1.14.10"),
+			DNSmasq:                   m("gcr.io/google_containers/k8s-dns-dnsmasq-nanny-amd64:1.14.10"),
+			KubeDNSSidecar:            m("gcr.io/google_containers/k8s-dns-sidecar-amd64:1.14.10"),
+			KubeDNSAutoscaler:         m("gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.0.0"),
+			YunionCNI:                 m("yunion/cni:v1.0.2"),
+			PodInfraContainer:         m("gcr.io/google_containers/pause-amd64:3.1"),
+			Ingress:                   m("rancher/nginx-ingress-controller:0.16.2-rancher1"),
+			IngressBackend:            m("k8s.gcr.io/defaultbackend:1.4"),
+			MetricsServer:             m("gcr.io/google_containers/metrics-server-amd64:v0.2.1"),
+		},
 	}
 )
+
+func init() {
+	badVersions := map[string]bool{
+		"v1.9.7-rancher1":    true,
+		"v1.10.1-rancher1":   true,
+		"v1.8.11-rancher1":   true,
+		"v1.8.10-rancher1-1": true,
+	}
+	if K8sVersionToSystemImages != nil {
+		panic("Do not initialize or add values to K8sVersionToSystemImages")
+	}
+
+	K8sVersionToSystemImages = map[string]SystemImages{}
+
+	for version, images := range AllK8sVersions {
+		if badVersions[version] {
+			continue
+		}
+
+		longName := "rancher/hyperkube:" + version
+		if !strings.HasPrefix(longName, images.Kubernetes) {
+			panic(fmt.Sprintf("For K8s version %q, the Kubernetes image tag should be a substring of %q, currently it is %q", version, version, images.Kubernetes))
+		}
+	}
+
+	for _, latest := range K8sVersionsCurrent {
+		images, ok := AllK8sVersions[latest]
+		if !ok {
+			panic("K8s version is not found in AllK8sVersions map")
+		}
+		K8sVersionToSystemImages[latest] = images
+	}
+
+	if _, ok := K8sVersionToSystemImages[DefaultK8s]; !ok {
+		panic("Default K8s version " + DefaultK8s + " is not found in K8sVersionsCurrent list")
+	}
+}

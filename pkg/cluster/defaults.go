@@ -12,14 +12,14 @@ import (
 
 const (
 	DefaultServiceClusterIPRange = "10.43.0.0/16"
-	//DefaultClusterCIDR           = "10.42.0.0/16"
-	DefaultClusterCIDR       = "10.43.0.0/16"
-	DefaultClusterDNSService = "10.43.0.10"
-	DefaultClusterDomain     = "cluster.local"
-	DefaultClusterName       = "local"
-	DefaultClusterSSHKeyPath = "~/.ssh/id_rsa"
+	DefaultClusterCIDR           = "10.42.0.0/16"
+	DefaultClusterCIDR           = "10.43.0.0/16"
+	DefaultClusterDNSService     = "10.43.0.10"
+	DefaultClusterDomain         = "cluster.local"
+	DefaultClusterName           = "local"
+	DefaultClusterSSHKeyPath     = "~/.ssh/id_rsa"
 
-	DefaultK8sVersion = types.K8sV110
+	DefaultK8sVersion = types.DefaultK8s
 
 	DefaultSSHPort        = "22"
 	DefaultDockerSockPath = "/var/run/docker.sock"
@@ -29,7 +29,8 @@ const (
 
 	DefaultNetworkPlugin = "yunion"
 
-	DefaultIngressController = "nginx"
+	DefaultIngressController  = "nginx"
+	DefaultMonitoringProvider = "metrics-server"
 )
 
 func setDefaultIfEmptyMapValue(configMap map[string]string, key string, value string) {
@@ -81,26 +82,16 @@ func (c *Cluster) setClusterDefaults(ctx context.Context) {
 	if len(c.ClusterName) == 0 {
 		c.ClusterName = DefaultClusterName
 	}
+	if len(c.Version) == 0 {
+		c.Version = DefaultK8sVersion
+	}
+	if len(c.Monitoring.Provider) == 0 {
+		c.Monitoring.Provider = DefaultMonitoringProvider
+	}
 
 	c.setClusterImageDefaults()
-	c.setClusterKubernetesImageVersion(ctx)
 	c.setClusterServicesDefaults()
 	c.setClusterNetworkDefaults()
-}
-
-func (c *Cluster) setClusterKubernetesImageVersion(ctx context.Context) {
-	k8sImageNamed, _ := ref.ParseNormalizedNamed(c.SystemImages.Kubernetes)
-	// Kubernetes image is already set by c.setClusterImageDefaults(),
-	// I will override it here if Version is set.
-	var VersionedImageNamed ref.NamedTagged
-	if c.Version != "" {
-		VersionedImageNamed, _ = ref.WithTag(ref.TrimNamed(k8sImageNamed), c.Version)
-		c.SystemImages.Kubernetes = VersionedImageNamed.String()
-	}
-	normalizedSystemImage, _ := ref.ParseNormalizedNamed(c.SystemImages.Kubernetes)
-	if normalizedSystemImage.String() != k8sImageNamed.String() {
-		log.Infof("Overrding Kubernetes image [%s] with tag [%s]", VersionedImageNamed.Name(), VersionedImageNamed.Tag())
-	}
 }
 
 func (c *Cluster) setClusterServicesDefaults() {
@@ -146,7 +137,6 @@ func (c *Cluster) setClusterImageDefaults() {
 		&c.SystemImages.YunionCNI:                 imageDefaults.YunionCNI,
 		&c.SystemImages.Ingress:                   imageDefaults.Ingress,
 		&c.SystemImages.IngressBackend:            imageDefaults.IngressBackend,
-		&c.SystemImages.YunionK8sKeystoneAuth:     imageDefaults.YunionK8sKeystoneAuth,
 	}
 
 	for k, v := range systemImagesDefaultsMap {
@@ -165,5 +155,4 @@ func (c *Cluster) setClusterNetworkDefaults() {
 	for k, v := range networkPluginConfigDefaultsMap {
 		setDefaultIfEmptyMapValue(c.Network.Options, k, v)
 	}
-
 }
