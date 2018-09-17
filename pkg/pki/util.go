@@ -284,16 +284,6 @@ func GetLocalKubeConfig(configPath, configDir string) string {
 	return fmt.Sprintf("%s%s%s", baseDir, KubeAdminConfigPrefix, fileName)
 }
 
-func GetLocalYunionKubeConfig(configPath, configDir string) string {
-	baseDir := filepath.Dir(configPath)
-	if len(configDir) > 0 {
-		baseDir = filepath.Dir(configDir)
-	}
-	fileName := filepath.Base(configPath)
-	baseDir += "/"
-	return fmt.Sprintf("%s%s%s", baseDir, KubeYunionConfigPrefix, fileName)
-}
-
 func strCrtToEnv(crtName, crt string) string {
 	return fmt.Sprintf("%s=%s", getEnvFromName(crtName), crt)
 }
