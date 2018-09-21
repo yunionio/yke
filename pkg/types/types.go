@@ -37,6 +37,21 @@ type KubernetesEngineConfig struct {
 	WebhookAuth WebhookAuth `yaml:"webhook_auth" json:"webhookAuth"`
 }
 
+type BastionHost struct {
+	// Address of Bastion Host
+	Address string `yaml:"address" json:"address,omitempty"`
+	// SSH Port of Bastion Host
+	Port string `yaml:"port" json:"port,omitempty"`
+	// ssh User to Bastion Host
+	User string `yaml:"user" json:"user,omitempty"`
+	// SSH Agent Auth enable
+	SSHAgentAuth bool `yaml:"ssh_agent_auth,omitempty" json:"sshAgentAuth,omitempty"`
+	// SSH Private Key
+	SSHKey string `yaml:"ssh_key" json:"sshKey,omitempty" norman:"type=password"`
+	// SSH Private Key Path
+	SSHKeyPath string `yaml:"ssh_key_path" json:"sshKeyPath,omitempty"`
+}
+
 type PrivateRegistry struct {
 	// URL for the registry
 	URL string `yaml:"url" json:"url"`
@@ -44,6 +59,8 @@ type PrivateRegistry struct {
 	User string `yaml:"user" json:"user"`
 	// Password for registry access
 	Password string `yaml:"password" json:"password"`
+	// Default registry
+	IsDefault bool `yaml:"is_default" json:"isDefault,omitempty"`
 }
 
 type SystemImages struct {

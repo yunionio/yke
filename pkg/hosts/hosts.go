@@ -3,6 +3,8 @@ package hosts
 import (
 	"context"
 	"fmt"
+	"path"
+	"strings"
 
 	dtypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -15,18 +17,6 @@ import (
 	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
 	"yunion.io/yunioncloud/pkg/log"
-)
-
-const (
-	ToCleanEtcdDir       = "/var/lib/etcd"
-	ToCleanSSLDir        = "/etc/kubernetes"
-	ToCleanCNIConf       = "/etc/cni"
-	ToCleanCNIBin        = "/opt/cni"
-	ToCleanCNILib        = "/var/lib/cni"
-	ToCleanTempCertPath  = "/etc/kubernetes/.tmp/"
-	CleanerContainerName = "kube-cleaner"
-
-	K8sVersion = "1.8"
 )
 
 type Host struct {
@@ -46,65 +36,33 @@ type Host struct {
 	ToDelTaints         []string
 	DockerInfo          dtypes.Info
 	UpdateWorker        bool
+	PrefixPath          string
+	BastionHost         types.BastionHost
 }
 
-func (h *Host) TunnelHostConfig() tunnel.HostConfig {
-	return tunnel.HostConfig{
-		NodeName:     h.NodeName,
-		Address:      h.Address,
-		Port:         h.Port,
-		Username:     h.User,
-		SSHKeyString: h.SSHKey,
-		SSHKeyPath:   h.SSHKeyPath,
-	}
-}
+const (
+	ToCleanEtcdDir          = "/var/lib/etcd/"
+	ToCleanSSLDir           = "/etc/kubernetes/"
+	ToCleanCNIConf          = "/etc/cni/"
+	ToCleanCNIBin           = "/opt/cni/"
+	ToCleanCNILib           = "/var/lib/cni/"
+	ToCleanTempCertPath     = "/etc/kubernetes/.tmp/"
+	CleanerContainerName    = "kube-cleaner"
+	LogCleanerContainerName = "yke-log-cleaner"
+	YKELogsPath             = "/var/lib/yunion/yke/log"
 
-func (h *Host) TunnelUp(ctx context.Context, dailerFactory tunnel.DialerFactory) error {
-	var err error
-	h.DClient, err = docker.TunnelUpClient(ctx, h.TunnelHostConfig(), dailerFactory)
-	if err != nil {
-		return err
-	}
-	return checkDockerVersion(ctx, h)
-}
-
-func (h *Host) TunnelUpLocal(ctx context.Context) error {
-	var err error
-	h.DClient, err = docker.TunnelUpLocalClient(ctx, h.TunnelHostConfig())
-	if err != nil {
-		return err
-	}
-	return checkDockerVersion(ctx, h)
-}
-
-func checkDockerVersion(ctx context.Context, h *Host) error {
-	info, err := h.DClient.Info(ctx)
-	if err != nil {
-		return fmt.Errorf("Can't retrieve Docker Info: %v", err)
-	}
-	log.Debugf("Docker Info found: %#v", info)
-	h.DockerInfo = info
-	isvalid, err := docker.IsSupportedDockerVersion(info, K8sVersion)
-	if err != nil {
-		return fmt.Errorf("Error while determining supported Docker version [%s]: %v", info.ServerVersion, err)
-	}
-
-	if !isvalid && !h.IgnoreDockerVersion {
-		return fmt.Errorf("Unsupported Docker version found [%s], supported versions are %v", info.ServerVersion, docker.K8sDockerVersions[K8sVersion])
-	} else if !isvalid {
-		log.Warningf("Unsupported Docker version found [%s], supported versions are %v", info.ServerVersion, docker.K8sDockerVersions[K8sVersion])
-	}
-	return nil
-}
+	CoreOS           = "CoreOS"
+	CoreOSPrefixPath = "/opt/yke"
+)
 
 func (h *Host) CleanUpAll(ctx context.Context, cleanerImage string, prsMap map[string]types.PrivateRegistry, externalEtcd bool) error {
 	log.Infof("[hosts] Cleaning up host [%s]", h.Address)
 	toCleanPaths := []string{
-		ToCleanSSLDir,
+		path.Join(h.PrefixPath, ToCleanSSLDir),
 		ToCleanCNIConf,
 		ToCleanCNIBin,
-		ToCleanTempCertPath,
-		ToCleanCNILib,
+		path.Join(h.PrefixPath, ToCleanTempCertPath),
+		path.Join(h.PrefixPath, ToCleanCNILib),
 	}
 	if !externalEtcd {
 		toCleanPaths = append(toCleanPaths, ToCleanEtcdDir)
@@ -118,10 +76,10 @@ func (h *Host) CleanUpWorkerHost(ctx context.Context, cleanerImage string, prsMa
 		return nil
 	}
 	toCleanPaths := []string{
-		ToCleanSSLDir,
+		path.Join(h.PrefixPath, ToCleanSSLDir),
 		ToCleanCNIConf,
 		ToCleanCNIBin,
-		ToCleanCNILib,
+		path.Join(ToCleanCNILib, ToCleanCNILib),
 	}
 	return h.CleanUp(ctx, toCleanPaths, cleanerImage, prsMap)
 }
@@ -132,23 +90,23 @@ func (h *Host) CleanUpControlHost(ctx context.Context, cleanerImage string, prsM
 		return nil
 	}
 	toCleanPaths := []string{
-		ToCleanSSLDir,
+		path.Join(h.PrefixPath, ToCleanSSLDir),
 		ToCleanCNIConf,
 		ToCleanCNIBin,
-		ToCleanCNILib,
+		path.Join(h.PrefixPath, ToCleanCNILib),
 	}
 	return h.CleanUp(ctx, toCleanPaths, cleanerImage, prsMap)
 }
 
 func (h *Host) CleanUpEtcdHost(ctx context.Context, cleanerImage string, prsMap map[string]types.PrivateRegistry) error {
 	toCleanPaths := []string{
-		ToCleanEtcdDir,
-		ToCleanSSLDir,
+		path.Join(h.PrefixPath, ToCleanEtcdDir),
+		path.Join(h.PrefixPath, ToCleanSSLDir),
 	}
 	if h.IsWorker || h.IsControl {
 		log.Infof("[hosts] Host [%s] is already a worker or control host, skipping cleanup certs.", h.Address)
 		toCleanPaths = []string{
-			ToCleanEtcdDir,
+			path.Join(h.PrefixPath, ToCleanEtcdDir),
 		}
 	}
 	return h.CleanUp(ctx, toCleanPaths, cleanerImage, prsMap)
@@ -168,6 +126,10 @@ func (h *Host) CleanUp(ctx context.Context, toCleanPaths []string, cleanerImage 
 
 	log.Infof("[hosts] Removing cleaner container on host [%s]", h.Address)
 	if err := docker.RemoveContainer(ctx, h.DClient, h.Address, CleanerContainerName); err != nil {
+		return err
+	}
+	log.Infof("[hosts] Removing dead container logs on host [%s]", h.Address)
+	if err := DoRunLogCleaner(ctx, h, cleanerImage, prsMap); err != nil {
 		return err
 	}
 	log.Infof("[hosts] Successfully cleaned up host [%s]", h.Address)
@@ -199,37 +161,13 @@ func DeleteNode(ctx context.Context, toDeleteHost *Host, kubeClient *kubernetes.
 	return nil
 }
 
-func NodesToHosts(cNodes []types.ConfigNode, nodeRole string) []*Host {
-	hostList := make([]*Host, 0)
-	for _, node := range cNodes {
-		for _, role := range node.Role {
-			if role == nodeRole {
-				newHost := Host{
-					ConfigNode: node,
-				}
-				hostList = append(hostList, &newHost)
-				break
-			}
-		}
+func RemoveTaintFromHost(ctx context.Context, host *Host, taintKey string, kubeClient *kubernetes.Clientset) error {
+	log.Infof("[hosts] removing taint [%s] from host [%s]", taintKey, host.Address)
+	if err := k8s.RemoveTaintFromNodeByKey(kubeClient, host.HostnameOverride, taintKey); err != nil {
+		return err
 	}
-	return hostList
-}
-
-func GetUniqueHostList(etcdHosts, cpHosts, workerHosts []*Host) []*Host {
-	hostList := []*Host{}
-	hostList = append(hostList, etcdHosts...)
-	hostList = append(hostList, cpHosts...)
-	hostList = append(hostList, workerHosts...)
-	// little trick to get a unique host list
-	uniqHostMap := make(map[*Host]bool)
-	for _, host := range hostList {
-		uniqHostMap[host] = true
-	}
-	uniqHostList := []*Host{}
-	for host := range uniqHostMap {
-		uniqHostList = append(uniqHostList, host)
-	}
-	return uniqHostList
+	log.Infof("[hosts] Successfully deleted taint [%s] from host [%s]", taintKey, host.Address)
+	return nil
 }
 
 func GetToDeleteHosts(currentHosts, configHosts, inactiveHosts []*Host) []*Host {
@@ -317,4 +255,74 @@ func buildCleanerConfig(host *Host, toCleanDirs []string, cleanerImage string) (
 		Binds: bindMounts,
 	}
 	return imageCfg, hostCfg
+}
+
+func NodesToHosts(cNodes []types.ConfigNode, nodeRole string) []*Host {
+	hostList := make([]*Host, 0)
+	for _, node := range cNodes {
+		for _, role := range node.Role {
+			if role == nodeRole {
+				newHost := Host{
+					ConfigNode: node,
+				}
+				hostList = append(hostList, &newHost)
+				break
+			}
+		}
+	}
+	return hostList
+}
+
+func GetUniqueHostList(etcdHosts, cpHosts, workerHosts []*Host) []*Host {
+	hostList := []*Host{}
+	hostList = append(hostList, etcdHosts...)
+	hostList = append(hostList, cpHosts...)
+	hostList = append(hostList, workerHosts...)
+	// little trick to get a unique host list
+	uniqHostMap := make(map[*Host]bool)
+	for _, host := range hostList {
+		uniqHostMap[host] = true
+	}
+	uniqHostList := []*Host{}
+	for host := range uniqHostMap {
+		uniqHostList = append(uniqHostList, host)
+	}
+	return uniqHostList
+}
+
+func GetPrefixPath(osType, ClusterPrefixPath string) string {
+	var prefixPath string
+	switch {
+	case ClusterPrefixPath != "/":
+		prefixPath = ClusterPrefixPath
+	case strings.Contains(osType, CoreOS):
+		prefixPath = CoreOSPrefixPath
+	default:
+		prefixPath = ClusterPrefixPath
+	}
+	return prefixPath
+}
+
+func DoRunLogCleaner(ctx context.Context, host *Host, alpineImage string, prsMap map[string]type.PrivateRegistry) error {
+	log.Debugf("[cleanup] Starting log link cleanup on host [%s]", host.Address)
+	imageCfg := &container.Config{
+		Image: alpineImage,
+		Tty: true,
+		Cmd: []string{
+			"sh",
+			"-c",
+			fmt.Sprintf("find %s -type l ! -exec test -e {} \\; -print -delete", YKELogsPath),
+		},
+	}
+	hostCfg := &container.HostConfig{
+		Binds: []string{
+			"/var/lib:/var/lib",
+		},
+		Privileged: true,
+	}
+	if err := docker.DoRemoveContainer(ctx, host.DClient, LogCleanerContainerName, host.Address); err != nil {
+		return err
+	}
+	log.Debugf("[cleanup] Successfully cleaned up log links on host [%s]", host.Address)
+	return nil
 }

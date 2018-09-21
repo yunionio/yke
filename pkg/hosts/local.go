@@ -1,11 +1,11 @@
-package tunnel
+package hosts
 
 import (
 	"fmt"
 	"net"
 )
 
-func LocalHealthcheckFactory(h HostConfig) (DialFunc, error) {
+func LocalHealthcheckFactory(h *Host) (func(network, address string) (net.Conn, error), error) {
 	dialer, err := newDialer(h, "health")
 	return dialer.DialHealthcheckLocally, err
 }
