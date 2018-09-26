@@ -5,19 +5,21 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v2"
 
+	"yunion.io/x/log"
+	"yunion.io/x/pkg/util/sets"
+
 	"yunion.io/yke/pkg/cluster"
+	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/pki"
 	"yunion.io/yke/pkg/services"
-	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
-	"yunion.io/yunioncloud/pkg/util/sets"
 )
 
 const (
@@ -47,6 +49,18 @@ func ConfigCommand() cli.Command {
 			cli.BoolFlag{
 				Name:  "print,p",
 				Usage: "Print configuration",
+			},
+			cli.BoolFlag{
+				Name:  "system-images",
+				Usage: "Generate the default system images",
+			},
+			cli.BoolFlag{
+				Name:  "all",
+				Usage: "Generate the default system images for all versions",
+			},
+			cli.StringFlag{
+				Name:  "version",
+				Usage: "Generate the default system images for specific k8s versions",
 			},
 			cli.StringFlag{
 				Name:  "topo,t",
@@ -254,7 +268,7 @@ func directlyTopoConfig(ctx *cli.Context, configFile string, print bool) error {
 	if len(privateKeyPath) == 0 {
 		return fmt.Errorf("SSH private key path not provided")
 	}
-	pKey, err := tunnel.PrivateKeyPath(privateKeyPath)
+	pKey, err := hosts.PrivateKeyPath(privateKeyPath)
 	if err != nil {
 		return fmt.Errorf("Get private key content: %v", err)
 	}
@@ -329,16 +343,6 @@ func setTopoConfigDefaults(ctx *cli.Context, c *types.KubernetesEngineConfig, yu
 			Image: imageDefaults.Kubernetes,
 		},
 	}
-	servicesConfig.YunionWebhookAuth = types.YunionWebhookAuthService{
-		BaseService: types.BaseService{
-			Image: imageDefaults.YunionK8sKeystoneAuth,
-		},
-		OsAuthURL:     yunionWebhookAuth.OsAuthURL,
-		OsUsername:    yunionWebhookAuth.OsUsername,
-		OsPassword:    yunionWebhookAuth.OsPassword,
-		OsProjectName: yunionWebhookAuth.OsProjectName,
-		OsRegionName:  yunionWebhookAuth.OsRegionName,
-	}
 	c.WebhookAuth.URL = yunionWebhookAuth.URL
 	servicesConfig.KubeAPI.ExtraArgs = map[string]string{
 		"authentication-token-webhook-config-file": "/etc/kubernetes/webhook.kubeconfig",
@@ -365,6 +369,9 @@ func setTopoConfigDefaults(ctx *cli.Context, c *types.KubernetesEngineConfig, yu
 }
 
 func clusterConfig(ctx *cli.Context) error {
+	if ctx.Bool("system-images") {
+		return generateSystemImagesList(ctx.String("version"), ctx.Bool("all"))
+	}
 	configFile := ctx.String("name")
 	print := ctx.Bool("print")
 	cluster := types.KubernetesEngineConfig{}
@@ -429,12 +436,29 @@ func clusterConfig(ctx *cli.Context) error {
 	}
 	cluster.Authorization = *authzConfig
 
+	// Get k8s/system images
+	systemImages, err := getSystemImagesConfig(reader)
+	if err != nil {
+		return err
+	}
+	cluster.SystemImages = *systemImages
+
 	// Get Services Config
 	serviceConfig, err := getServiceConfig(reader)
 	if err != nil {
 		return err
 	}
 	cluster.Services = *serviceConfig
+
+	// Get addon manifests
+	addonsInclude, err := getAddonManifests(reader)
+	if err != nil {
+		return err
+	}
+
+	if len(addonsInclude) > 0 {
+		cluster.AddonsInclude = append(cluster.AddonsInclude, addonsInclude...)
+	}
 
 	return writeConfig(&cluster, configFile, print)
 }
@@ -480,7 +504,7 @@ func getHostConfig(reader *bufio.Reader, index int, clusterSSHKeyPath string) (*
 	}
 	host.User = sshUser
 
-	isControlHost, err := getConfig(reader, fmt.Sprintf("Is host (%s) a control host (y/n)?", address), "y")
+	isControlHost, err := getConfig(reader, fmt.Sprintf("Is host (%s) a Control Plane host (y/n)?", address), "y")
 	if err != nil {
 		return nil, err
 	}
@@ -488,7 +512,7 @@ func getHostConfig(reader *bufio.Reader, index int, clusterSSHKeyPath string) (*
 		host.Role = append(host.Role, services.ControlRole)
 	}
 
-	isWorkerHost, err := getConfig(reader, fmt.Sprintf("Is host (%s) a worker host (y/n)?", address), "n")
+	isWorkerHost, err := getConfig(reader, fmt.Sprintf("Is host (%s) a Worker host (y/n)?", address), "n")
 	if err != nil {
 		return nil, err
 	}
@@ -524,6 +548,22 @@ func getHostConfig(reader *bufio.Reader, index int, clusterSSHKeyPath string) (*
 	return &host, nil
 }
 
+func getSystemImagesConfig(reader *bufio.Reader) (*types.SystemImages, error) {
+	imageDefaults := types.K8sVersionToSystemImages[cluster.DefaultK8sVersion]
+
+	kubeImage, err := getConfig(reader, "Kubernetes Docker image", imageDefaults.Kubernetes)
+	if err != nil {
+		return nil, err
+	}
+
+	systemImages, ok := types.K8sVersionToSystemImages[kubeImage]
+	if ok {
+		return &systemImages, nil
+	}
+	imageDefaults.Kubernetes = kubeImage
+	return &imageDefaults, nil
+}
+
 func getServiceConfig(reader *bufio.Reader) (*types.ConfigServices, error) {
 	servicesConfig := types.ConfigServices{}
 	servicesConfig.Etcd = types.ETCDService{}
@@ -532,24 +572,6 @@ func getServiceConfig(reader *bufio.Reader) (*types.ConfigServices, error) {
 	servicesConfig.Scheduler = types.SchedulerService{}
 	servicesConfig.Kubelet = types.KubeletService{}
 	servicesConfig.Kubeproxy = types.KubeproxyService{}
-
-	imageDefaults := types.K8sVersionToSystemImages[cluster.DefaultK8sVersion]
-
-	etcdImage, err := getConfig(reader, "Etcd Docker Image", imageDefaults.Etcd)
-	if err != nil {
-		return nil, err
-	}
-	servicesConfig.Etcd.Image = etcdImage
-
-	kubeImage, err := getConfig(reader, "Kubernetes Docker image", imageDefaults.Kubernetes)
-	if err != nil {
-		return nil, err
-	}
-	servicesConfig.KubeAPI.Image = kubeImage
-	servicesConfig.KubeController.Image = kubeImage
-	servicesConfig.Scheduler.Image = kubeImage
-	servicesConfig.Kubelet.Image = kubeImage
-	servicesConfig.Kubeproxy.Image = kubeImage
 
 	clusterDomain, err := getConfig(reader, "Cluster domain", cluster.DefaultClusterDomain)
 	if err != nil {
@@ -586,11 +608,6 @@ func getServiceConfig(reader *bufio.Reader) (*types.ConfigServices, error) {
 	}
 	servicesConfig.Kubelet.ClusterDNSServer = clusterDNSServiceIP
 
-	infraPodImage, err := getConfig(reader, "Infra Container image", imageDefaults.PodInfraContainer)
-	if err != nil {
-		return nil, err
-	}
-	servicesConfig.Kubelet.InfraContainerImage = infraPodImage
 	return &servicesConfig, nil
 }
 
@@ -624,4 +641,98 @@ func getNetworkConfig(reader *bufio.Reader) (*types.NetworkConfig, error) {
 	}
 	networkConfig.Plugin = networkPlugin
 	return &networkConfig, nil
+}
+
+func getAddonManifests(reader *bufio.Reader) ([]string, error) {
+	var addonSlice []string
+	var resume = true
+
+	includeAddons, err := getConfig(reader, "Add addon manifest URLs or YAML files", "no")
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.ContainsAny(includeAddons, "Yes YES Y yes y") {
+		for resume {
+			addonPath, err := getConfig(reader, "Enter the path or URL for the manifest", "")
+			if err != nil {
+				return nil, err
+			}
+
+			addonSlice = append(addonSlice, addonPath)
+
+			cont, err := getConfig(reader, "Add another addon", "no")
+			if err != nil {
+				return nil, err
+			}
+
+			if strings.ContainsAny(cont, "Yes y Y yes YES") {
+				resume = true
+			} else {
+				resume = false
+			}
+		}
+	}
+
+	return addonSlice, nil
+}
+
+func generateSystemImagesList(version string, all bool) error {
+	allVersions := []string{}
+	for version := range types.AllK8sVersions {
+		allVersions = append(allVersions, version)
+	}
+	if all {
+		for version, ykeSystemImages := range types.AllK8sVersions {
+			log.Infof("Generating images list for version [%s]:", version)
+			uniqueImages := getUniqueSystemImageList(ykeSystemImages)
+			for _, image := range uniqueImages {
+				if image == "" {
+					continue
+				}
+				fmt.Printf("%s\n", image)
+			}
+		}
+		return nil
+	}
+	if len(version) == 0 {
+		version = types.DefaultK8s
+	}
+	ykeSystemImages := types.AllK8sVersions[version]
+	if ykeSystemImages == (types.SystemImages{}) {
+		return fmt.Errorf("k8s version is not supported, supported version are: %v", allVersions)
+	}
+	log.Infof("Generating images list for version [%s]: ", version)
+	uniqueImages := getUniqueSystemImageList(ykeSystemImages)
+	for _, image := range uniqueImages {
+		if image == "" {
+			continue
+		}
+		fmt.Printf("%s\n", image)
+	}
+	return nil
+}
+
+func getUniqueSystemImageList(ykeSystemImages types.SystemImages) []string {
+	imagesReflect := reflect.ValueOf(ykeSystemImages)
+	images := make([]string, imagesReflect.NumField())
+	for i := 0; i < imagesReflect.NumField(); i++ {
+		images[i] = imagesReflect.Field(i).Interface().(string)
+	}
+	return getUniqueSlice(images)
+}
+
+func getUniqueSlice(slice []string) []string {
+	encountered := map[string]bool{}
+	unique := []string{}
+
+	for i := range slice {
+		if encountered[slice[i]] {
+			continue
+		} else {
+			encountered[slice[i]] = true
+			unique = append(unique, slice[i])
+		}
+	}
+	return unique
 }

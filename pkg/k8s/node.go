@@ -13,16 +13,24 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 
-	"yunion.io/yunioncloud/pkg/log"
+	"yunion.io/x/log"
 )
 
 const (
 	HostnameLabel             = "kubernetes.io/hostname"
 	InternalAddressAnnotation = "yke.yunion.io/internal-ip"
 	ExternalAddressAnnotation = "yke.yunion.io/external-ip"
+	AWSCloudProvider          = "aws"
 )
 
 func DeleteNode(k8sClient *kubernetes.Clientset, nodeName, cloudProvider string) error {
+	if cloudProvider == AWSCloudProvider {
+		node, err := GetNode(k8sClient, nodeName)
+		if err != nil {
+			return err
+		}
+		nodeName = node.Name
+	}
 	return k8sClient.CoreV1().Nodes().Delete(nodeName, &metav1.DeleteOptions{})
 }
 
@@ -36,7 +44,7 @@ func GetNode(k8sClient *kubernetes.Clientset, nodeName string) (*v1.Node, error)
 		return nil, err
 	}
 	for _, node := range nodes.Items {
-		if node.Labels[HostnameLabel] == nodeName {
+		if strings.ToLower(node.Labels[HostnameLabel]) == strings.ToLower(nodeName) {
 			return &node, nil
 		}
 	}
@@ -212,13 +220,11 @@ func doSyncTaints(k8sClient *kubernetes.Clientset, nodeName string, toAddTaints,
 		node.Spec.Taints = append(node.Spec.Taints, toTaint(taintStr))
 	}
 	// Remove Taints from node
-	for i, taintStr := range toDelTaints {
-		if isTaintExist(toTaint(taintStr), node.Spec.Taints) {
-			node.Spec.Taints = append(node.Spec.Taints[:i], node.Spec.Taints[i+1:]...)
-		}
+	for _, taintStr := range toDelTaints {
+		node.Spec.Taints = delTaintFromList(node.Spec.Taints, toTaint(taintStr))
 	}
 
-	//node.Spec.Taints
+	// node.Spec.Taints
 	_, err = k8sClient.CoreV1().Nodes().Update(node)
 	if err != nil {
 		log.Debugf("Error updating node [%s] with new set of taints: %v", node.Name, err)
@@ -274,4 +280,15 @@ func SetAddressesAnnotations(k8sClient *kubernetes.Clientset, nodeName, internal
 		return nil
 	}
 	return listErr
+}
+
+func delTaintFromList(l []v1.Taint, t v1.Taint) []v1.Taint {
+	r := []v1.Taint{}
+	for _, i := range l {
+		if i == t {
+			continue
+		}
+		r = append(r, i)
+	}
+	return r
 }

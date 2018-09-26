@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 const (

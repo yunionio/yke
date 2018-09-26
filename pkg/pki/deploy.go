@@ -14,11 +14,15 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"k8s.io/client-go/util/cert"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/docker"
 	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/templates"
 	ytypes "yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
+)
+
+const (
+	StateDeployerContainerName = "cluster-state-deployer"
 )
 
 func DeployCertificatesOnPlaneHost(ctx context.Context, host *hosts.Host, keConfig ytypes.KubernetesEngineConfig, crtMap map[string]CertificatePKI, certDownloaderImage string, prsMap map[string]ytypes.PrivateRegistry) error {
@@ -28,6 +32,39 @@ func DeployCertificatesOnPlaneHost(ctx context.Context, host *hosts.Host, keConf
 		env = append(env, crt.ToEnv()...)
 	}
 	return doRunDeployer(ctx, host, env, certDownloaderImage, prsMap)
+}
+
+func DeployStateOnPlaneHost(ctx context.Context, host *hosts.Host, stateDownloaderImage string, prsMap map[string]ytypes.PrivateRegistry, clusterState string) error {
+	// remove existing container. Only way it's still here is if previous deployment failed
+	if err := docker.DoRemoveContainer(ctx, host.DClient, StateDeployerContainerName, host.Address); err != nil {
+		return err
+	}
+	containerEnv := []string{ClusterStateEnv + "=" + clusterState}
+	ClusterStateFilePath := path.Join(host.PrefixPath, TempCertPath, ClusterStateFile)
+	imageCfg := &container.Config{
+		Image: stateDownloaderImage,
+		Cmd: []string{
+			"sh",
+			"-c",
+			fmt.Sprintf("t=$(mktemp); echo -e \"$%s\" > $t && mv $t %s && chmod 644 %s", ClusterStateEnv, ClusterStateFilePath,
+				ClusterStateFilePath),
+		},
+		Env: containerEnv,
+	}
+	hostCfg := &container.HostConfig{
+		Binds: []string{
+			fmt.Sprintf("%s:/etc/kubernetes:z", path.Join(host.PrefixPath, "/etc/kubernetes")),
+		},
+		Privileged: true,
+	}
+	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, StateDeployerContainerName, host.Address, "state", prsMap); err != nil {
+		return err
+	}
+	if err := docker.DoRemoveContainer(ctx, host.DClient, StateDeployerContainerName, host.Address); err != nil {
+		return err
+	}
+	log.Debugf("[state] Successfully started state deployer container on node [%s]", host.Address)
+	return nil
 }
 
 func doRunDeployer(ctx context.Context, host *hosts.Host, containerEnv []string, certDownloaderImage string, prsMap map[string]ytypes.PrivateRegistry) error {
@@ -47,11 +84,12 @@ func doRunDeployer(ctx context.Context, host *hosts.Host, containerEnv []string,
 	}
 	imageCfg := &container.Config{
 		Image: certDownloaderImage,
+		Cmd:   []string{"cert-deployer"},
 		Env:   containerEnv,
 	}
 	hostCfg := &container.HostConfig{
 		Binds: []string{
-			"/etc/kubernetes:/etc/kubernetes",
+			fmt.Sprintf("%s:/etc/kubernetes:z", path.Join(host.PrefixPath, "/etc/kubernetes")),
 		},
 		Privileged: true,
 	}
@@ -78,31 +116,6 @@ func doRunDeployer(ctx context.Context, host *hosts.Host, containerEnv []string,
 		}
 		return nil
 	}
-}
-
-func DeployYunionUserConfig(ctx context.Context, localConfigPath string, host *hosts.Host) error {
-	log.Debugf("Deploying yunion user kubeconfig locally: %s", localConfigPath)
-	str, err := templates.CompileTemplateFromMap(templates.KubectlOsAuthTemplate, map[string]string{
-		"KubeAPIServerURL": fmt.Sprintf("https://%s:6443", host.Address),
-	})
-	if err != nil {
-		return err
-	}
-	err = ioutil.WriteFile(localConfigPath, []byte(str), 0640)
-	if err != nil {
-		return fmt.Errorf("Failed to create local yunion kube user kubeconfig file: %v", err)
-	}
-	log.Infof("Successfully Deployed local yunion user kubeconfig at [%s]", localConfigPath)
-	return nil
-}
-
-func RemoveYunionUserConfig(ctx context.Context, localConfigPath string) {
-	log.Infof("Removing yunion user Kubeconfig: %s", localConfigPath)
-	if err := os.Remove(localConfigPath); err != nil {
-		log.Warningf("Failed to remove yunion user Kubeconfig file: %v", err)
-		return
-	}
-	log.Infof("Local yunion user Kubeconfig removed successfully")
 }
 
 func DeployAdminConfig(ctx context.Context, kubeConfig, localConfigPath string) error {
@@ -159,19 +172,28 @@ func FetchCertificatesFromHost(ctx context.Context, extraHosts []*hosts.Host, ho
 
 	for certName, config := range crtList {
 		certificate := CertificatePKI{}
-		crt, err := fetchFileFromHost(ctx, GetCertTempPath(certName), image, host, prsMap)
-		if err != nil {
+		crt, err := FetchFileFromHost(ctx, GetCertTempPath(certName), image, host, prsMap, CertFetcherContainer, "certificates")
+		// I will only exit with an error if it's not a not-found-error and this is not an etcd certificate
+		if err != nil && (!strings.HasPrefix(certName, "kube-etcd") &&
+			!strings.Contains(certName, APIProxyClientCertName) &&
+			!strings.Contains(certName, RequestHeaderCACertName)) {
 			if strings.Contains(err.Error(), "no such file or directory") ||
-				strings.Contains(err.Error(), "Could not find the file") ||
-				strings.Contains(err.Error(), "No such container:path:") {
+				strings.Contains(err.Error(), "Could not find the file") {
 				return nil, nil
 			}
 			return nil, err
 		}
-		key, err := fetchFileFromHost(ctx, GetKeyTempPath(certName), image, host, prsMap)
+		// If I can't find an etcd or api aggregator cert, I will not fail and will create it later
+		if crt == "" && (strings.HasPrefix(certName, "kube-etcd") ||
+			strings.Contains(certName, APIProxyClientCertName) ||
+			strings.Contains(certName, RequestHeaderCACertName)) {
+			tmpCerts[certName] = CertificatePKI{}
+			continue
+		}
+		key, err := FetchFileFromHost(ctx, GetKeyTempPath(certName), image, host, prsMap, CertFetcherContainer, "certificate")
 
 		if config {
-			config, err := fetchFileFromHost(ctx, GetConfigTempPath(certName), image, host, prsMap)
+			config, err := FetchFileFromHost(ctx, GetConfigTempPath(certName), image, host, prsMap, CertFetcherContainer, "certificate")
 			if err != nil {
 				return nil, err
 			}
@@ -197,27 +219,27 @@ func FetchCertificatesFromHost(ctx context.Context, extraHosts []*hosts.Host, ho
 	return populateCertMap(tmpCerts, localConfigPath, extraHosts), nil
 }
 
-func fetchFileFromHost(ctx context.Context, filePath, image string, host *hosts.Host, prsMap map[string]ytypes.PrivateRegistry) (string, error) {
+func FetchFileFromHost(ctx context.Context, filePath, image string, host *hosts.Host, prsMap map[string]ytypes.PrivateRegistry, containerName, state string) (string, error) {
 
 	imageCfg := &container.Config{
 		Image: image,
 	}
 	hostCfg := &container.HostConfig{
 		Binds: []string{
-			"/etc/kubernetes:/etc/kubernetes",
+			fmt.Sprintf("%s:/etc/kubernetes:z", path.Join(host.PrefixPath, "/etc/kubernetes")),
 		},
 		Privileged: true,
 	}
-	isRunning, err := docker.IsContainerRunning(ctx, host.DClient, host.Address, CertFetcherContainer, true)
+	isRunning, err := docker.IsContainerRunning(ctx, host.DClient, host.Address, containerName, true)
 	if err != nil {
 		return "", err
 	}
 	if !isRunning {
-		if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, CertFetcherContainer, host.Address, "certificates", prsMap); err != nil {
+		if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, containerName, host.Address, state, prsMap); err != nil {
 			return "", err
 		}
 	}
-	file, err := docker.ReadFileFromContainer(ctx, host.DClient, host.Address, CertFetcherContainer, filePath)
+	file, err := docker.ReadFileFromContainer(ctx, host.DClient, host.Address, containerName, filePath)
 	if err != nil {
 		return "", err
 	}

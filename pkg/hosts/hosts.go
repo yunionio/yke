@@ -12,11 +12,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
+	"yunion.io/x/log"
 	"yunion.io/yke/pkg/docker"
 	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 type Host struct {
@@ -65,7 +64,7 @@ func (h *Host) CleanUpAll(ctx context.Context, cleanerImage string, prsMap map[s
 		path.Join(h.PrefixPath, ToCleanCNILib),
 	}
 	if !externalEtcd {
-		toCleanPaths = append(toCleanPaths, ToCleanEtcdDir)
+		toCleanPaths = append(toCleanPaths, path.Join(h.PrefixPath, ToCleanEtcdDir))
 	}
 	return h.CleanUp(ctx, toCleanPaths, cleanerImage, prsMap)
 }
@@ -79,7 +78,7 @@ func (h *Host) CleanUpWorkerHost(ctx context.Context, cleanerImage string, prsMa
 		path.Join(h.PrefixPath, ToCleanSSLDir),
 		ToCleanCNIConf,
 		ToCleanCNIBin,
-		path.Join(ToCleanCNILib, ToCleanCNILib),
+		path.Join(h.PrefixPath, ToCleanCNILib),
 	}
 	return h.CleanUp(ctx, toCleanPaths, cleanerImage, prsMap)
 }
@@ -120,7 +119,7 @@ func (h *Host) CleanUp(ctx context.Context, toCleanPaths []string, cleanerImage 
 		return err
 	}
 
-	if err := docker.WaitForContainer(ctx, h.DClient, h.Address, CleanerContainerName); err != nil {
+	if _, err := docker.WaitForContainer(ctx, h.DClient, h.Address, CleanerContainerName); err != nil {
 		return err
 	}
 
@@ -303,11 +302,11 @@ func GetPrefixPath(osType, ClusterPrefixPath string) string {
 	return prefixPath
 }
 
-func DoRunLogCleaner(ctx context.Context, host *Host, alpineImage string, prsMap map[string]type.PrivateRegistry) error {
+func DoRunLogCleaner(ctx context.Context, host *Host, alpineImage string, prsMap map[string]types.PrivateRegistry) error {
 	log.Debugf("[cleanup] Starting log link cleanup on host [%s]", host.Address)
 	imageCfg := &container.Config{
 		Image: alpineImage,
-		Tty: true,
+		Tty:   true,
 		Cmd: []string{
 			"sh",
 			"-c",
@@ -319,6 +318,12 @@ func DoRunLogCleaner(ctx context.Context, host *Host, alpineImage string, prsMap
 			"/var/lib:/var/lib",
 		},
 		Privileged: true,
+	}
+	if err := docker.DoRemoveContainer(ctx, host.DClient, LogCleanerContainerName, host.Address); err != nil {
+		return err
+	}
+	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, LogCleanerContainerName, host.Address, "cleanup", prsMap); err != nil {
+		return err
 	}
 	if err := docker.DoRemoveContainer(ctx, host.DClient, LogCleanerContainerName, host.Address); err != nil {
 		return err

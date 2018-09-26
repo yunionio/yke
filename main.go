@@ -5,8 +5,9 @@ import (
 
 	"github.com/urfave/cli"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/cmd"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 func main() {

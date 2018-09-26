@@ -12,12 +12,12 @@ import (
 
 	etcdclient "github.com/coreos/etcd/client"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/tunnel"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
-func getEtcdClient(ctx context.Context, etcdHost *hosts.Host, localConnDialerFactory tunnel.DialerFactory, cert, key []byte) (etcdclient.Client, error) {
+func getEtcdClient(ctx context.Context, etcdHost *hosts.Host, localConnDialerFactory hosts.DialerFactory, cert, key []byte) (etcdclient.Client, error) {
 	dialer, err := getEtcdDialer(localConnDialerFactory, etcdHost)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create a dialer for host [%s]: %v", etcdHost.Address, err)
@@ -34,14 +34,14 @@ func getEtcdClient(ctx context.Context, etcdHost *hosts.Host, localConnDialerFac
 	}
 
 	cfg := etcdclient.Config{
-		Endpoints: []string{"https://127.0.0.1:2379"},
+		Endpoints: []string{"https://" + etcdHost.InternalAddress + ":2379"},
 		Transport: DefaultEtcdTransport,
 	}
 
 	return etcdclient.New(cfg)
 }
 
-func isEtcdHealthy(ctx context.Context, localConnDialerFactory tunnel.DialerFactory, host *hosts.Host, cert, key []byte, url string) bool {
+func isEtcdHealthy(ctx context.Context, localConnDialerFactory hosts.DialerFactory, host *hosts.Host, cert, key []byte, url string) bool {
 	log.Debugf("[etcd] Check etcd cluster health")
 	for i := 0; i < 3; i++ {
 		dialer, err := getEtcdDialer(localConnDialerFactory, host)
@@ -103,15 +103,15 @@ func GetEtcdInitialCluster(hosts []*hosts.Host) string {
 	return initialCluster
 }
 
-func getEtcdDialer(localConnDialerFactory tunnel.DialerFactory, etcdHost *hosts.Host) (func(network, address string) (net.Conn, error), error) {
+func getEtcdDialer(localConnDialerFactory hosts.DialerFactory, etcdHost *hosts.Host) (func(network, address string) (net.Conn, error), error) {
 	etcdHost.LocalConnPort = 2379
-	var etcdFactory tunnel.DialerFactory
+	var etcdFactory hosts.DialerFactory
 	if localConnDialerFactory == nil {
-		etcdFactory = tunnel.LocalConnFactory
+		etcdFactory = hosts.LocalConnFactory
 	} else {
 		etcdFactory = localConnDialerFactory
 	}
-	return etcdFactory(etcdHost.TunnelHostConfig())
+	return etcdFactory(etcdHost)
 }
 
 func GetEtcdConnString(hosts []*hosts.Host) string {

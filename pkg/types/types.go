@@ -33,6 +33,14 @@ type KubernetesEngineConfig struct {
 	ClusterName string `yaml:"cluster_name" json:"clusterName"`
 	// Cloud Provider options
 	CloudProvider CloudProvider `yaml:"cloud_provider" json:"cloudProvider"`
+	// kubernetes directory path
+	PrefixPath string `yaml:"prefix_path" json:"prefixPath,omitempty"`
+	// Timeout in seconds for status check on addon deployment jobs
+	AddonJobTimeout int `yaml:"addon_job_timeout" json:"addonJobTimeout,omitempty"`
+	// Bastion/Jump Host configuration
+	BastionHost BastionHost `yaml:"bastion_host" json:"bastionHost,omitempty"`
+	// Monitoring Config
+	Monitoring MonitoringConfig `yaml:"monitoring" json:"monitoring,omitempty"`
 	// WebhookConfig options
 	WebhookAuth WebhookAuth `yaml:"webhook_auth" json:"webhookAuth"`
 }
@@ -146,9 +154,6 @@ type ConfigServices struct {
 	Kubelet KubeletService `yaml:"kubelet" json:"kubelet"`
 	// KubeProxy Service
 	Kubeproxy KubeproxyService `yaml:"kubeproxy" json:"kubeproxy"`
-
-	// YunionWebhookAuth Service
-	YunionWebhookAuth YunionWebhookAuthService `yaml:"yunion-webhook-auth" json:"yunionWebhookAuth"`
 }
 
 type YunionWebhookAuthService struct {
@@ -174,6 +179,12 @@ type ETCDService struct {
 	Key string `yaml:"key" json:"key"`
 	// External etcd prefix
 	Path string `yaml:"path" json:"path"`
+	// Etcd Recurring snapshot Service
+	Snapshot bool `yaml:"snapshot" json:"snapshot,omitempty"`
+	// Etcd snapshot Retention period
+	Retention string `yaml:"retention" json:"retention,omitempty"`
+	// Etcd snapshot Creation period
+	Creation string `yaml:"creation" json:"creation,omitempty"`
 }
 
 type KubeAPIService struct {
@@ -181,6 +192,8 @@ type KubeAPIService struct {
 	BaseService `yaml:",inline" json:",inline"`
 	// Virtual IP range that will be used by Kubernetes services
 	ServiceClusterIPRange string `yaml:"service_cluster_ip_range" json:"serviceClusterIpRange"`
+	// Port range for services defined NodePort type
+	ServiceNodePortRange string `yaml:"service_node_port_range" json:"serviceNodePortRange,omitempty"`
 	// Enabled/Disable PodSecurityPolicy
 	PodSecurityPolicy bool `yaml:"pod_security_policy" json:"podSecurityPolicy"`
 }
@@ -224,6 +237,8 @@ type BaseService struct {
 	ExtraArgs map[string]string `yaml:"extra_args" json:"extraArgs"`
 	// Extra binds added to the nodes
 	ExtraBinds []string `yaml:"extra_binds" json:"extraBinds"`
+	// this is to provide extra env variable to the docker container running kubernetes service
+	ExtraEnv []string `yaml:"extra_env" json:"extraEnv,omitempty"`
 }
 
 type NetworkConfig struct {
@@ -260,6 +275,8 @@ type IngressConfig struct {
 	Options map[string]string `yaml:"options" json:"options"`
 	// NodeSelector key pair
 	NodeSelector map[string]string `yaml:"node_selector" json:"nodeSelector"`
+	// Ingress controller extra arguments
+	ExtraArgs map[string]string
 }
 
 type Plan struct {
@@ -314,6 +331,10 @@ type Process struct {
 	Privileged bool `json:"privileged"`
 	// Process healthcheck
 	HealthCheck HealthCheck `json:"healthCheck"`
+	// Process docker container Labels
+	Labels map[string]string `json:"labels,omitempty"`
+	// Process docker publish container's port to host
+	Publish []string `json:"publish,omitempty"`
 }
 
 type HealthCheck struct {
@@ -348,4 +369,11 @@ type KubernetesServicesOptions struct {
 	KubeController map[string]string `json:"kubeController"`
 	// Additional options passed to Scheduler
 	Scheduler map[string]string `json:"scheduler"`
+}
+
+type MonitoringConfig struct {
+	// Monitoring server provider
+	Provider string `yaml:"provider" json:"provider,omitempty"`
+	// Metrics server options
+	Options map[string]string `yaml:"options" json:"options,omitempty"`
 }

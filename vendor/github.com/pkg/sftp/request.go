@@ -116,32 +116,10 @@ func (r *Request) lsInc(offset int64) {
 }
 
 // manage file read/write state
-func (r *Request) setWriterState(wa io.WriterAt) {
-	r.state.Lock()
-	defer r.state.Unlock()
-	r.state.writerAt = wa
-}
-func (r *Request) setReaderState(ra io.ReaderAt) {
-	r.state.Lock()
-	defer r.state.Unlock()
-	r.state.readerAt = ra
-}
 func (r *Request) setListerState(la ListerAt) {
 	r.state.Lock()
 	defer r.state.Unlock()
 	r.state.listerAt = la
-}
-
-func (r *Request) getWriter() io.WriterAt {
-	r.state.RLock()
-	defer r.state.RUnlock()
-	return r.state.writerAt
-}
-
-func (r *Request) getReader() io.ReaderAt {
-	r.state.RLock()
-	defer r.state.RUnlock()
-	return r.state.readerAt
 }
 
 func (r *Request) getLister() ListerAt {
@@ -152,16 +130,22 @@ func (r *Request) getLister() ListerAt {
 
 // Close reader/writer if possible
 func (r *Request) close() error {
-	rd := r.getReader()
+	defer func() {
+		if r.cancelCtx != nil {
+			r.cancelCtx()
+		}
+	}()
+	r.state.RLock()
+	rd := r.state.readerAt
+	r.state.RUnlock()
 	if c, ok := rd.(io.Closer); ok {
 		return c.Close()
 	}
-	wt := r.getWriter()
+	r.state.RLock()
+	wt := r.state.writerAt
+	r.state.RUnlock()
 	if c, ok := wt.(io.Closer); ok {
 		return c.Close()
-	}
-	if r.cancelCtx != nil {
-		r.cancelCtx()
 	}
 	return nil
 }
@@ -175,8 +159,10 @@ func (r *Request) call(handlers Handlers, pkt requestPacket) responsePacket {
 		return fileput(handlers.FilePut, r, pkt)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		return filecmd(handlers.FileCmd, r, pkt)
-	case "List", "Stat", "Readlink":
+	case "List":
 		return filelist(handlers.FileList, r, pkt)
+	case "Stat", "Readlink":
+		return filestat(handlers.FileList, r, pkt)
 	default:
 		return statusFromError(pkt,
 			errors.Errorf("unexpected method: %s", r.Method))
@@ -200,13 +186,20 @@ func packetData(p requestPacket) (data []byte, offset int64, length uint32) {
 // wrap FileReader handler
 func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 	var err error
-	reader := r.getReader()
+	r.state.RLock()
+	reader := r.state.readerAt
+	r.state.RUnlock()
 	if reader == nil {
-		reader, err = h.Fileread(r)
-		if err != nil {
-			return statusFromError(pkt, err)
+		r.state.Lock()
+		if r.state.readerAt == nil {
+			r.state.readerAt, err = h.Fileread(r)
+			if err != nil {
+				r.state.Unlock()
+				return statusFromError(pkt, err)
+			}
 		}
-		r.setReaderState(reader)
+		reader = r.state.readerAt
+		r.state.Unlock()
 	}
 
 	_, offset, length := packetData(pkt)
@@ -226,13 +219,20 @@ func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 // wrap FileWriter handler
 func fileput(h FileWriter, r *Request, pkt requestPacket) responsePacket {
 	var err error
-	writer := r.getWriter()
+	r.state.RLock()
+	writer := r.state.writerAt
+	r.state.RUnlock()
 	if writer == nil {
-		writer, err = h.Filewrite(r)
-		if err != nil {
-			return statusFromError(pkt, err)
+		r.state.Lock()
+		if r.state.writerAt == nil {
+			r.state.writerAt, err = h.Filewrite(r)
+			if err != nil {
+				r.state.Unlock()
+				return statusFromError(pkt, err)
+			}
 		}
-		r.setWriterState(writer)
+		writer = r.state.writerAt
+		r.state.Unlock()
 	}
 
 	data, offset, _ := packetData(pkt)
@@ -290,6 +290,22 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			})
 		}
 		return ret
+	default:
+		err = errors.Errorf("unexpected method: %s", r.Method)
+		return statusFromError(pkt, err)
+	}
+}
+
+func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
+	lister, err := h.Filelist(r)
+	if err != nil {
+		return statusFromError(pkt, err)
+	}
+	finfo := make([]os.FileInfo, 1)
+	n, err := lister.ListAt(finfo, 0)
+	finfo = finfo[:n] // avoid need for nil tests below
+
+	switch r.Method {
 	case "Stat":
 		if err != nil && err != io.EOF {
 			return statusFromError(pkt, err)
@@ -336,8 +352,10 @@ func requestMethod(p requestPacket) (method string) {
 		method = "Put"
 	case *sshFxpReaddirPacket:
 		method = "List"
-	case *sshFxpOpenPacket, *sshFxpOpendirPacket:
+	case *sshFxpOpenPacket:
 		method = "Open"
+	case *sshFxpOpendirPacket:
+		method = "Stat"
 	case *sshFxpSetstatPacket, *sshFxpFsetstatPacket:
 		method = "Setstat"
 	case *sshFxpRenamePacket:

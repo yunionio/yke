@@ -9,12 +9,13 @@ import (
 
 	"github.com/urfave/cli"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/cluster"
+	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/k8s"
 	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 func RemoveCommand() cli.Command {
@@ -35,7 +36,7 @@ func RemoveCommand() cli.Command {
 		},
 	}
 
-	removeFlags = append(removeFlags, sshCliOptions...)
+	removeFlags = append(removeFlags, commonFlags...)
 
 	return cli.Command{
 		Name:   "remove",
@@ -47,13 +48,13 @@ func RemoveCommand() cli.Command {
 
 func ClusterRemove(
 	ctx context.Context,
-	rkeConfig *types.KubernetesEngineConfig,
-	dialerFactory tunnel.DialerFactory,
+	ykeConfig *types.KubernetesEngineConfig,
+	dialerFactory hosts.DialerFactory,
 	k8sWrapTransport k8s.WrapTransport,
 	local bool, configDir string) error {
 
 	log.Infof("Tearing down Kubernetes cluster")
-	kubeCluster, err := cluster.ParseCluster(ctx, rkeConfig, clusterFilePath, configDir, dialerFactory, nil, k8sWrapTransport)
+	kubeCluster, err := cluster.ParseCluster(ctx, ykeConfig, clusterFilePath, configDir, dialerFactory, nil, k8sWrapTransport)
 	if err != nil {
 		return err
 	}
@@ -95,38 +96,38 @@ func clusterRemoveFromCli(ctx *cli.Context) error {
 		return fmt.Errorf("Failed to resolve cluster file: %v", err)
 	}
 	clusterFilePath = filePath
-	rkeConfig, err := cluster.ParseConfig(clusterFile)
+	ykeConfig, err := cluster.ParseConfig(clusterFile)
 	if err != nil {
 		return fmt.Errorf("Failed to parse cluster file: %v", err)
 	}
 
-	rkeConfig, err = setOptionsFromCLI(ctx, rkeConfig)
+	ykeConfig, err = setOptionsFromCLI(ctx, ykeConfig)
 	if err != nil {
 		return err
 	}
 
-	return ClusterRemove(context.Background(), rkeConfig, nil, nil, false, "")
+	return ClusterRemove(context.Background(), ykeConfig, nil, nil, false, "")
 }
 
 func clusterRemoveLocal(ctx *cli.Context) error {
-	var rkeConfig *types.KubernetesEngineConfig
+	var ykeConfig *types.KubernetesEngineConfig
 	clusterFile, filePath, err := resolveClusterFile(ctx)
 	if err != nil {
 		log.Infof("Failed to resolve cluster file, using default cluster instead")
-		rkeConfig = cluster.GetLocalConfig()
+		ykeConfig = cluster.GetLocalConfig()
 	} else {
 		clusterFilePath = filePath
-		rkeConfig, err = cluster.ParseConfig(clusterFile)
+		ykeConfig, err = cluster.ParseConfig(clusterFile)
 		if err != nil {
 			return fmt.Errorf("Failed to parse cluster file: %v", err)
 		}
-		rkeConfig.Nodes = []types.ConfigNode{*cluster.GetLocalNodeConfig()}
+		ykeConfig.Nodes = []types.ConfigNode{*cluster.GetLocalNodeConfig()}
 	}
 
-	rkeConfig, err = setOptionsFromCLI(ctx, rkeConfig)
+	ykeConfig, err = setOptionsFromCLI(ctx, ykeConfig)
 	if err != nil {
 		return err
 	}
 
-	return ClusterRemove(context.Background(), rkeConfig, nil, nil, true, "")
+	return ClusterRemove(context.Background(), ykeConfig, nil, nil, true, "")
 }

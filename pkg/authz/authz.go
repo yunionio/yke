@@ -3,9 +3,10 @@ package authz
 import (
 	"context"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/k8s"
 	"yunion.io/yke/pkg/templates"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 func ApplyJobDeployerServiceAccount(ctx context.Context, kubeConfigPath string, k8sWrapTransport k8s.WrapTransport) error {

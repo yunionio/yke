@@ -5,11 +5,13 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
+
+	"yunion.io/x/log"
 
 	"yunion.io/yke/pkg/docker"
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 const (
@@ -20,16 +22,19 @@ const (
 	SidekickServiceName   = "sidekick"
 	RBACAuthorizationMode = "rbac"
 
-	KubeAPIContainerName        = "kube-apiserver"
-	KubeletContainerName        = "kubelet"
-	KubeproxyContainerName      = "kube-proxy"
-	KubeControllerContainerName = "kube-controller-manager"
-	SchedulerContainerName      = "kube-scheduler"
-	EtcdContainerName           = "etcd"
-	NginxProxyContainerName     = "nginx-proxy"
-	SidekickContainerName       = "service-sidekick"
-	LogLinkContainerName        = "log-linker"
-	LogCleanerContainerName     = "log-cleaner"
+	KubeAPIContainerName          = "kube-apiserver"
+	KubeletContainerName          = "kubelet"
+	KubeproxyContainerName        = "kube-proxy"
+	KubeControllerContainerName   = "kube-controller-manager"
+	SchedulerContainerName        = "kube-scheduler"
+	EtcdContainerName             = "etcd"
+	EtcdSnapshotContainerName     = "etcd-rolling-snapshots"
+	EtcdSnapshotOnceContainerName = "etcd-snapshot-once"
+	EtcdRestoreContainerName      = "etcd-restore"
+	NginxProxyContainerName       = "nginx-proxy"
+	SidekickContainerName         = "service-sidekick"
+	LogLinkContainerName          = "log-linker"
+	LogCleanerContainerName       = "log-cleaner"
 
 	KubeAPIPort        = 6443
 	SchedulerPort      = 10251
@@ -45,15 +50,26 @@ func runSidekick(ctx context.Context, host *hosts.Host, prsMap map[string]types.
 	if err != nil {
 		return err
 	}
+	imageCfg, hostCfg, _ := GetProcessConfig(sidecarProcess)
+	isUpgradable := false
 	if isRunning {
-		log.Infof("[%s] Sidekick container already created on host [%s]", SidekickServiceName, host.Address)
-		return nil
+		isUpgradable, err = docker.IsContainerUpgradable(ctx, host.DClient, imageCfg, hostCfg, SidekickContainerName, host.Address, SidekickServiceName)
+		if err != nil {
+			return err
+		}
+		if !isUpgradable {
+			log.Infof("[%s] Sidekick container already created on host [%s]", SidekickServiceName, host.Address)
+			return nil
+		}
 	}
 
-	imageCfg, hostCfg, _ := GetProcessConfig(sidecarProcess)
-	sidecarImage := sidecarProcess.Image
-	if err := docker.UseLocalOrPull(ctx, host.DClient, host.Address, sidecarImage, SidekickServiceName, prsMap); err != nil {
+	if err := docker.UseLocalOrPull(ctx, host.DClient, host.Address, sidecarProcess.Image, SidekickServiceName, prsMap); err != nil {
 		return err
+	}
+	if isUpgradable {
+		if err := docker.DoRemoveContainer(ctx, host.DClient, SidekickContainerName, host.Address); err != nil {
+			return err
+		}
 	}
 	if _, err := docker.CreateContainer(ctx, host.DClient, host.Address, SidekickContainerName, imageCfg, hostCfg); err != nil {
 		return err
@@ -71,15 +87,18 @@ func GetProcessConfig(process types.Process) (*container.Config, *container.Host
 		Cmd:        process.Args,
 		Env:        process.Env,
 		Image:      process.Image,
+		Labels:     process.Labels,
 	}
 	// var pidMode container.PidMode
 	// pidMode = process.PidMode
+	_, portBindings, _ := nat.ParsePortSpecs(process.Publish)
 	hostCfg := &container.HostConfig{
-		VolumesFrom: process.VolumesFrom,
-		Binds:       process.Binds,
-		NetworkMode: container.NetworkMode(process.NetworkMode),
-		PidMode:     container.PidMode(process.PidMode),
-		Privileged:  process.Privileged,
+		VolumesFrom:  process.VolumesFrom,
+		Binds:        process.Binds,
+		NetworkMode:  container.NetworkMode(process.NetworkMode),
+		PidMode:      container.PidMode(process.PidMode),
+		Privileged:   process.Privileged,
+		PortBindings: portBindings,
 	}
 	if len(process.RestartPolicy) > 0 {
 		hostCfg.RestartPolicy = container.RestartPolicy{Name: process.RestartPolicy}
@@ -102,14 +121,14 @@ func createLogLink(ctx context.Context, host *hosts.Host, containerName, plane, 
 	}
 	containerID := containerInspect.ID
 	containerLogPath := containerInspect.LogPath
-	containerLogLink := fmt.Sprintf("%s/%s_%s.log", LogsPath, containerName, containerID)
+	containerLogLink := fmt.Sprintf("%s/%s_%s.log", hosts.YKELogsPath, containerName, containerID)
 	imageCfg := &container.Config{
 		Image: image,
 		Tty:   true,
 		Cmd: []string{
 			"sh",
 			"-c",
-			fmt.Sprintf("mkdir -p %s ; ln -s %s %s", LogsPath, containerLogPath, containerLogLink),
+			fmt.Sprintf("mkdir -p %s ; ln -s %s %s", hosts.YKELogsPath, containerLogPath, containerLogLink),
 		},
 	}
 	hostCfg := &container.HostConfig{

@@ -52,13 +52,13 @@ func GenerateSignedCertAndKey(
 	return clientCert, rootKey, nil
 }
 
-func generateCACertAndKey() (*x509.Certificate, *rsa.PrivateKey, error) {
+func GenerateCACertAndKey(commonName string) (*x509.Certificate, *rsa.PrivateKey, error) {
 	rootKey, err := cert.NewPrivateKey()
 	if err != nil {
 		return nil, nil, fmt.Errorf("Failed to generate private key for CA certificate: %v", err)
 	}
 	caConfig := cert.Config{
-		CommonName: CACertName,
+		CommonName: commonName,
 	}
 	kubeCACert, err := cert.NewSelfSignedCACert(caConfig, rootKey)
 	if err != nil {
@@ -234,6 +234,8 @@ func getControlCertKeys() []string {
 		KubeNodeCertName,
 		EtcdClientCertName,
 		EtcdClientCACertName,
+		RequestHeaderCACertName,
+		APIProxyClientCertName,
 	}
 }
 

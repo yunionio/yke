@@ -50,17 +50,18 @@ func newDialer(h *Host, kind string) (*dialer, error) {
 		}
 	}
 
-	dailer := &dialer{
+	dialer := &dialer{
 		sshAddress:      fmt.Sprintf("%s:%s", h.Address, h.Port),
-		username:        h.Username,
+		username:        h.User,
 		dockerSocket:    h.DockerSocket,
 		sshKeyString:    h.SSHKey,
 		netConn:         "unix",
-		useSSHAgentAuth: h.UseSSHAgentAuth,
+		useSSHAgentAuth: h.SSHAgentAuth,
 		bastionDialer:   bastionDialer,
 	}
 
-	if dailer.sshKeyString == "" && !dialer.useSSHAgentAuth {
+	if dialer.sshKeyString == "" && !dialer.useSSHAgentAuth {
+		var err error
 		dialer.sshKeyString, err = privateKeyPath(h.SSHKeyPath)
 		if err != nil {
 			return nil, err
@@ -103,7 +104,7 @@ func (d *dialer) Dial(network, addr string) (net.Conn, error) {
 	if d.bastionDialer != nil {
 		conn, err = d.getBastionHostTunnelConn()
 	} else {
-		conn, err := d.getSSHTunnelConnection()
+		conn, err = d.getSSHTunnelConnection()
 	}
 	if err != nil {
 		if strings.Contains(err.Error(), "no key found") {
@@ -146,7 +147,7 @@ func (d *dialer) getSSHTunnelConnection() (*ssh.Client, error) {
 	return ssh.Dial("tcp", d.sshAddress, cfg)
 }
 
-func newHTTPClient(h HostConfig, dialerFactory DialerFactory) (*http.Client, error) {
+func (h *Host) newHTTPClient(dialerFactory DialerFactory) (*http.Client, error) {
 	factory := dialerFactory
 	if factory == nil {
 		factory = SSHFactory

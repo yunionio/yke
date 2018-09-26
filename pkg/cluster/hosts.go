@@ -2,18 +2,18 @@ package cluster
 
 import (
 	"context"
-	//"net"
 	"fmt"
 	"strings"
 
 	"github.com/docker/docker/api/types"
 	"golang.org/x/sync/errgroup"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/pki"
 	"yunion.io/yke/pkg/services"
 	ytypes "yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 const (
@@ -32,7 +32,7 @@ func (c *Cluster) TunnelHosts(ctx context.Context, local bool) error {
 	c.InactiveHosts = make([]*hosts.Host, 0)
 	uniqueHosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
 	for i := range uniqueHosts {
-		if err := uniqueHosts[i].TunnelUp(ctx, c.DockerDialerFactory); err != nil {
+		if err := uniqueHosts[i].TunnelUp(ctx, c.DockerDialerFactory, c.PrefixPath); err != nil {
 			// Unsupported Docker version is NOT a connectivity problem that we can recover! So we bail out on it
 			if strings.Contains(err.Error(), "Unsupported Docker version found") {
 				return err
@@ -49,24 +49,6 @@ func (c *Cluster) TunnelHosts(ctx context.Context, local bool) error {
 		c.KubernetesEngineConfig.Nodes = removeFromKENodes(host.ConfigNode, c.KubernetesEngineConfig.Nodes)
 	}
 	return ValidateHostCount(c)
-}
-
-func removeFromHosts(hostToRemove *hosts.Host, hostList []*hosts.Host) []*hosts.Host {
-	for i := range hostList {
-		if hostToRemove.Address == hostList[i].Address {
-			return append(hostList[:i], hostList[i+1:]...)
-		}
-	}
-	return hostList
-}
-
-func removeFromKENodes(nodeToRemove ytypes.ConfigNode, nodeList []ytypes.ConfigNode) []ytypes.ConfigNode {
-	for i := range nodeList {
-		if nodeToRemove.Address == nodeList[i].Address {
-			return append(nodeList[:i], nodeList[i+1:]...)
-		}
-	}
-	return nodeList
 }
 
 func (c *Cluster) InvertIndexHosts() error {
@@ -88,7 +70,10 @@ func (c *Cluster) InvertIndexHosts() error {
 			newHost.ToAddLabels[k] = v
 		}
 		newHost.IgnoreDockerVersion = c.IgnoreDockerVersion
-
+		if c.BastionHost.Address != "" {
+			// Add the bastion host information to eash host object
+			newHost.BastionHost = c.BastionHost
+		}
 		for _, role := range host.Role {
 			log.Debugf("Host: " + host.Address + " has role: " + role)
 			switch role {
@@ -140,9 +125,6 @@ func (c *Cluster) SetUpHosts(ctx context.Context) error {
 		if err := pki.DeployAdminConfig(ctx, c.Certificates[pki.KubeAdminCertName].Config, c.LocalKubeConfigPath); err != nil {
 			return err
 		}
-		if err := pki.DeployYunionUserConfig(ctx, c.LocalKubeYunionUserConfigPath, c.ControlPlaneHosts[0]); err != nil {
-			return err
-		}
 		if err := deployAdminConfig(ctx, hosts, c.Certificates[pki.KubeAdminCertName].Config, c.SystemImages.Alpine, c.PrivateRegistriesMap); err != nil {
 			return err
 		}
@@ -162,4 +144,32 @@ func (c *Cluster) SetUpHosts(ctx context.Context) error {
 		log.Infof("[%s] Successfully deployed kubernetes webhook file to Cluster nodes", WebhookConfigDeployer)
 	}
 	return nil
+}
+
+func CheckEtcdHostsChanged(kubeCluster, currentCluster *Cluster) error {
+	if currentCluster != nil {
+		etcdChanged := hosts.IsHostListChanged(currentCluster.EtcdHosts, kubeCluster.EtcdHosts)
+		if etcdChanged {
+			return fmt.Errorf("Adding or removing Etcd nodes is not supported")
+		}
+	}
+	return nil
+}
+
+func removeFromHosts(hostToRemove *hosts.Host, hostList []*hosts.Host) []*hosts.Host {
+	for i := range hostList {
+		if hostToRemove.Address == hostList[i].Address {
+			return append(hostList[:i], hostList[i+1:]...)
+		}
+	}
+	return hostList
+}
+
+func removeFromKENodes(nodeToRemove ytypes.ConfigNode, nodeList []ytypes.ConfigNode) []ytypes.ConfigNode {
+	for i := range nodeList {
+		if nodeToRemove.Address == nodeList[i].Address {
+			return append(nodeList[:i], nodeList[i+1:]...)
+		}
+	}
+	return nodeList
 }

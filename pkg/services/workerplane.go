@@ -5,18 +5,28 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 const (
-	unschedulableEtcdTaint = "node-role.kubernetes.io/etcd=true:NoExecute"
+	unschedulableEtcdTaint    = "node-role.kubernetes.io/etcd=true:NoExecute"
+	unschedulableControlTaint = "node-role.kubernetes.io/controlplane=true:NoSchedule"
 )
 
-func RunWorkerPlane(ctx context.Context, allHosts []*hosts.Host, localConnDialerFactory tunnel.DialerFactory, prsMap map[string]types.PrivateRegistry, processMap map[string]types.Process, kubeletProcessHostMap map[*hosts.Host]types.Process, certMap map[string]pki.CertificatePKI, updateWorkersOnly bool, alpineImage string) error {
+func RunWorkerPlane(
+	ctx context.Context,
+	allHosts []*hosts.Host,
+	localConnDialerFactory hosts.DialerFactory,
+	prsMap map[string]types.PrivateRegistry,
+	workerNodePlanMap map[string]types.ConfigNodePlan,
+	certMap map[string]pki.CertificatePKI,
+	updateWorkersOnly bool,
+	alpineImage string,
+) error {
 	log.Infof("[%s] Building up Worker Plane..", WorkerRole)
 	var errgrp errgroup.Group
 	for _, host := range allHosts {
@@ -25,22 +35,27 @@ func RunWorkerPlane(ctx context.Context, allHosts []*hosts.Host, localConnDialer
 				continue
 			}
 		}
-		if !host.IsControl && !host.IsWorker {
-			// Add unschedulable taint
-			host.ToAddTaints = append(host.ToAddTaints, unschedulableEtcdTaint)
+		if !host.IsWorker {
+			if host.IsEtcd {
+				// Add unschedulable taint
+				host.ToAddTaints = append(host.ToAddTaints, unschedulableEtcdTaint)
+			}
+			if host.IsControl {
+				// Add unscheduable taint
+				host.ToAddTaints = append(host.ToAddTaints, unschedulableControlTaint)
+			}
 		}
 		runHost := host
 		// maps are not thread safe
-		hostProcessMap := copyProcessMap(processMap)
+		hostProcessMap := copyProcessMap(workerNodePlanMap[runHost.Address].Processes)
 		errgrp.Go(func() error {
-			hostProcessMap[KubeletContainerName] = kubeletProcessHostMap[runHost]
 			return doDeployWorkerPlane(ctx, runHost, localConnDialerFactory, prsMap, hostProcessMap, certMap, alpineImage)
 		})
 	}
 	if err := errgrp.Wait(); err != nil {
 		return err
 	}
-	log.Infof("[%s] Successfully started Worker Plane..", WorkerRole)
+	log.Infof("[%s] Successfully started Worker Plane...", WorkerRole)
 	return nil
 }
 
@@ -72,7 +87,7 @@ func RemoveWorkerPlane(ctx context.Context, workerHosts []*hosts.Host, force boo
 }
 
 func doDeployWorkerPlane(ctx context.Context, host *hosts.Host,
-	localConnDialerFactory tunnel.DialerFactory,
+	localConnDialerFactory hosts.DialerFactory,
 	prsMap map[string]types.PrivateRegistry, processMap map[string]types.Process, certMap map[string]pki.CertificatePKI, alpineImage string) error {
 	// run nginx proxy
 	if !host.IsControl {

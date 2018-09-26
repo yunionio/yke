@@ -3,16 +3,18 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/urfave/cli"
 	"k8s.io/client-go/util/cert"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/cluster"
+	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/k8s"
 	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 var clusterFilePath string
@@ -47,7 +49,7 @@ func UpCommand() cli.Command {
 		},
 	}
 
-	upFlags = append(upFlags, sshCliOptions...)
+	upFlags = append(upFlags, commonFlags...)
 
 	return cli.Command{
 		Name:   "up",
@@ -60,9 +62,10 @@ func UpCommand() cli.Command {
 func ClusterUp(
 	ctx context.Context,
 	config *types.KubernetesEngineConfig,
-	dockerDialerFactory, localConnDialerFactory tunnel.DialerFactory,
+	dockerDialerFactory, localConnDialerFactory hosts.DialerFactory,
 	k8sWrapTransport k8s.WrapTransport,
 	local bool, configDir string, updateOnly, disablePortCheck bool) (string, string, string, string, map[string]pki.CertificatePKI, error) {
+
 	log.Infof("Building Kubernetes cluster")
 	var APIURL, caCrt, clientCert, clientKey string
 	kubeCluster, err := cluster.ParseCluster(ctx, config, clusterFilePath, configDir, dockerDialerFactory, localConnDialerFactory, k8sWrapTransport)
@@ -144,8 +147,25 @@ func ClusterUp(
 	}
 	caCrt = string(cert.EncodeCertPEM(kubeCluster.Certificates[pki.CACertName].Certificate))
 
+	if err := checkAllIncluded(kubeCluster); err != nil {
+		return APIURL, caCrt, clientCert, clientKey, nil, err
+	}
+
 	log.Infof("Finished building Kubernetes cluster successfully")
 	return APIURL, caCrt, clientCert, clientKey, kubeCluster.Certificates, nil
+}
+
+func checkAllIncluded(cluster *cluster.Cluster) error {
+	if len(cluster.InactiveHosts) == 0 {
+		return nil
+	}
+
+	var names []string
+	for _, host := range cluster.InactiveHosts {
+		names = append(names, host.Address)
+	}
+
+	return fmt.Errorf("Provisioning incomplete, host(s) [%s] skipped because they could not be contacted", strings.Join(names, ","))
 }
 
 func backgroudContext(ctx *cli.Context) context.Context {
@@ -195,6 +215,9 @@ func clusterUpLocal(ctx *cli.Context) error {
 		}
 		config.Nodes = []types.ConfigNode{*cluster.GetLocalNodeConfig()}
 	}
-	_, _, _, _, _, err = ClusterUp(backgroudContext(ctx), config, nil, tunnel.LocalHealthcheckFactory, nil, true, "", false, false)
+
+	config.IgnoreDockerVersion = ctx.Bool("ignore-docker-version")
+
+	_, _, _, _, _, err = ClusterUp(backgroudContext(ctx), config, nil, hosts.LocalHealthcheckFactory, nil, true, "", false, false)
 	return err
 }

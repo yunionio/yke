@@ -1,11 +1,11 @@
 package hosts
 
 import (
-	"os"
-	"io/ioutil"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"os"
 	"path/filepath"
 
 	"github.com/docker/docker/client"
@@ -15,7 +15,6 @@ import (
 	"yunion.io/x/log"
 
 	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/tunnel"
 )
 
 const (
@@ -54,7 +53,7 @@ func (h *Host) TunnelUpLocal(ctx context.Context) error {
 	log.Debugf("Connecting to Docker API for host [%s]", h.Address)
 	h.DClient, err = client.NewEnvClient()
 	if err != nil {
-		return fmt.Errorf("Can't initiate NewClient: %v",e rr)
+		return fmt.Errorf("Can't initiate NewClient: %v", err)
 	}
 	return checkDockerVersion(ctx, h)
 }
@@ -85,7 +84,7 @@ func parsePrivateKey(keyBuff string) (ssh.Signer, error) {
 
 func getSSHConfig(username, sshPrivateKeyString string, useAgentAuth bool) (*ssh.ClientConfig, error) {
 	config := &ssh.ClientConfig{
-		User: username,
+		User:            username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
@@ -109,6 +108,10 @@ func getSSHConfig(username, sshPrivateKeyString string, useAgentAuth bool) (*ssh
 	}
 	config.Auth = append(config.Auth, ssh.PublicKeys(signer))
 	return config, nil
+}
+
+func PrivateKeyPath(sshKeyPath string) (string, error) {
+	return privateKeyPath(sshKeyPath)
 }
 
 func privateKeyPath(sshKeyPath string) (string, error) {

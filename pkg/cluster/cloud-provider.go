@@ -6,10 +6,11 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/docker"
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
 
 const (
@@ -40,7 +41,7 @@ func doDeployConfigFile(ctx context.Context, host *hosts.Host, cloudConfig, alpi
 		Cmd: []string{
 			"sh",
 			"-c",
-			fmt.Sprintf("if [ ! -f %s ]; then echo -e \"$%s\" > %s;fi", CloudConfigPath, CloudConfigEnv, CloudConfigPath),
+			fmt.Sprintf("t=$(mktemp); echo -e \"$%s\" > $t && mv $t %s && chmod 644 %s", CloudConfigEnv, CloudConfigPath, CloudConfigPath),
 		},
 		Env: containerEnv,
 	}

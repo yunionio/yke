@@ -2,6 +2,7 @@ package docker
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -9,16 +10,42 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
+	"time"
 
+	"github.com/coreos/go-semver/semver"
 	ref "github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
+
+	"yunion.io/x/log"
+	"yunion.io/x/pkg/util/sets"
 
 	ytypes "yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
-	"yunion.io/yunioncloud/pkg/util/sets"
 )
+
+const (
+	DockerRegistryURL = "docker.io"
+	// RestartTimeout in seconds
+	RestartTimeout = 30
+	// StopTimeout in seconds
+	StopTimeout = 30
+)
+
+var K8sDockerVersions = map[string][]string{
+	"1.8":  {"1.11.x", "1.12.x", "1.13.x", "17.03.x"},
+	"1.9":  {"1.11.x", "1.12.x", "1.13.x", "17.03.x"},
+	"1.10": {"1.11.x", "1.12.x", "1.13.x", "17.03.x"},
+	"1.11": {"1.11.x", "1.12.x", "1.13.x", "17.03.x"},
+}
+
+type dockerConfig struct {
+	Auths map[string]authConfig
+}
+
+type authConfig types.AuthConfig
 
 func DoRunContainer(ctx context.Context, dClient *client.Client, imageCfg *container.Config, hostCfg *container.HostConfig, containerName, hostname, plane string, prsMap map[string]ytypes.PrivateRegistry) error {
 	container, err := dClient.ContainerInspect(ctx, containerName)
@@ -41,8 +68,16 @@ func DoRunContainer(ctx context.Context, dClient *client.Client, imageCfg *conta
 	}
 	// Check for upgrades
 	if container.State.Running {
+		// check if container is in a restarting loop
+		if container.State.Restarting {
+			log.Debugf("[%s] Container [%s] is in a restarting loop [%s]", plane, containerName, hostname)
+			restartTimeoutDuration := RestartTimeout * time.Second
+			if err := dClient.ContainerRestart(ctx, container.ID, &restartTimeoutDuration); err != nil {
+				return fmt.Errorf("Failed to start [%s] container on host [%s]: %v", containerName, hostname, err)
+			}
+		}
 		log.Debugf("[%s] Container [%s] is already running on host [%s]", plane, containerName, hostname)
-		isUpgradable, err := IsContainerUpgradable(ctx, dClient, imageCfg, containerName, hostname, plane)
+		isUpgradable, err := IsContainerUpgradable(ctx, dClient, imageCfg, hostCfg, containerName, hostname, plane)
 		if err != nil {
 			return err
 		}
@@ -51,6 +86,7 @@ func DoRunContainer(ctx context.Context, dClient *client.Client, imageCfg *conta
 		}
 		return nil
 	}
+
 	// Start if not running
 	log.Debugf("[%s] Starting stopped container [%s] on host [%s]", plane, containerName, hostname)
 	if err := dClient.ContainerStart(ctx, container.ID, types.ContainerStartOptions{}); err != nil {
@@ -102,8 +138,8 @@ func DoRemoveContainer(ctx context.Context, dClient *client.Client, containerNam
 		}
 		return err
 	}
-	log.Debugf("[remove/%s] Stopping container on host [%s]", containerName, hostname)
-	err = StopContainer(ctx, dClient, hostname, containerName)
+	log.Debugf("[remove/%s] Removing container on host [%s]", containerName, hostname)
+	err = RemoveContainer(ctx, dClient, hostname, containerName)
 	if err != nil {
 		return err
 	}
@@ -238,28 +274,40 @@ func InspectContainer(ctx context.Context, dClient *client.Client, hostname, con
 }
 
 func StopRenameContainer(ctx context.Context, dClient *client.Client, hostname, oldContainerName, newContainerName string) error {
+	// make sure we don't have an old old-container from a previous broken update
+	exists, err := IsContainerRunning(ctx, dClient, hostname, newContainerName, true)
+	if err != nil {
+		return err
+	}
+	if exists {
+		if err := RemoveContainer(ctx, dClient, hostname, newContainerName); err != nil {
+			return err
+		}
+	}
 	if err := StopContainer(ctx, dClient, hostname, oldContainerName); err != nil {
 		return err
 	}
-	if err := WaitForContainer(ctx, dClient, hostname, oldContainerName); err != nil {
+	if _, err := WaitForContainer(ctx, dClient, hostname, oldContainerName); err != nil {
 		return nil
 	}
 	return RenameContainer(ctx, dClient, hostname, oldContainerName, newContainerName)
 }
 
-func WaitForContainer(ctx context.Context, dClient *client.Client, hostname, containerName string) error {
+func WaitForContainer(ctx context.Context, dClient *client.Client, hostname, containerName string) (int64, error) {
 	statusCh, errCh := dClient.ContainerWait(ctx, containerName, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
 		if err != nil {
-			return fmt.Errorf("Error waiting for container [%s] on host [%s]: %v", containerName, hostname, err)
+			return 1, fmt.Errorf("Error waiting for container [%s] on host [%s]: %v", containerName, hostname, err)
 		}
-	case <-statusCh:
+	case status := <-statusCh:
+		// return the status exit code of the container
+		return status.StatusCode, nil
 	}
-	return nil
+	return 0, nil
 }
 
-func IsContainerUpgradable(ctx context.Context, dClient *client.Client, imageCfg *container.Config, containerName, hostname, plane string) (bool, error) {
+func IsContainerUpgradable(ctx context.Context, dClient *client.Client, imageCfg *container.Config, hostCfg *container.HostConfig, containerName, hostname, plane string) (bool, error) {
 	log.Debugf("[%s] Checking if container [%s] is eligible for upgrade on host [%s]", plane, containerName, hostname)
 	// this should be mode to a higher layer.
 
@@ -267,13 +315,46 @@ func IsContainerUpgradable(ctx context.Context, dClient *client.Client, imageCfg
 	if err != nil {
 		return false, err
 	}
+	// image inspect to compare the env correctly
+	imageInspect, _, err := dClient.ImageInspectWithRaw(ctx, imageCfg.Image)
+	if err != nil {
+		if !client.IsErrNotFound(err) {
+			return false, err
+		}
+		log.Debugf("[%s] Container [%s] is eligible for upgrade on host [%s]", plane, containerName, hostname)
+		return true, nil
+	}
+
 	if containerInspect.Config.Image != imageCfg.Image ||
 		!sliceEqualsIgnoreOrder(containerInspect.Config.Entrypoint, imageCfg.Entrypoint) ||
-		!sliceEqualsIgnoreOrder(containerInspect.Config.Cmd, imageCfg.Cmd) {
+		!sliceEqualsIgnoreOrder(containerInspect.Config.Cmd, imageCfg.Cmd) ||
+		!isContainerEnvChanged(containerInspect.Config.Env, imageCfg.Env, imageInspect.Config.Env) ||
+		!sliceEqualsIgnoreOrder(containerInspect.HostConfig.Binds, hostCfg.Binds) {
 		log.Debugf("[%s] Container [%s] is eligible for upgrade on host [%s]", plane, containerName, hostname)
 		return true, nil
 	}
 	log.Debugf("[%s] Container [%s] is not eligible for upgrade on host [%s]", plane, containerName, hostname)
+	return false, nil
+}
+
+func sliceEqualsIgnoreOrder(left, right []string) bool {
+	return sets.NewString(left...).Equal(sets.NewString(right...))
+}
+
+func IsSupportedDockerVersion(info types.Info, K8sVersion string) (bool, error) {
+	dockerVersion, err := semver.NewVersion(info.ServerVersion)
+	if err != nil {
+		return false, err
+	}
+	for _, DockerVersion := range K8sDockerVersions[K8sVersion] {
+		supportedDockerVersion, err := convertToSemver(DockerVersion)
+		if err != nil {
+			return false, err
+		}
+		if dockerVersion.Major == supportedDockerVersion.Major && dockerVersion.Minor == supportedDockerVersion.Minor {
+			return true, nil
+		}
+	}
 	return false, nil
 }
 
@@ -294,12 +375,23 @@ func ReadFileFromContainer(ctx context.Context, dClient *client.Client, hostname
 	return string(file), nil
 }
 
-func ReadContainerLogs(ctx context.Context, dClient *client.Client, containerName string) (io.ReadCloser, error) {
-	return dClient.ContainerLogs(ctx, containerName, types.ContainerLogsOptions{ShowStdout: true})
+func ReadContainerLogs(ctx context.Context, dClient *client.Client, containerName string, follow bool, tail string) (io.ReadCloser, error) {
+	return dClient.ContainerLogs(ctx, containerName, types.ContainerLogsOptions{Follow: follow, ShowStdout: true, ShowStderr: true, Timestamps: false, Tail: tail})
 }
 
-func sliceEqualsIgnoreOrder(left, right []string) bool {
-	return sets.NewString(left...).Equal(sets.NewString(right...))
+func GetContainerLogsStdoutStderr(ctx context.Context, dClient *client.Client, containerName, tail string, follow bool) (string, error) {
+	var containerStderr bytes.Buffer
+	var containerStdout bytes.Buffer
+	var containerLog string
+	clogs, logserr := ReadContainerLogs(ctx, dClient, containerName, follow, tail)
+	if logserr != nil {
+		log.Debugf("logserr: %v", logserr)
+		return containerLog, fmt.Errorf("Failed to get gather logs from contaienr [%s]: %v", containerName, logserr)
+	}
+	defer clogs.Close()
+	stdcopy.StdCopy(&containerStdout, &containerStderr, clogs)
+	containerLog = containerStderr.String()
+	return containerLog, nil
 }
 
 func tryRegistryAuth(pr ytypes.PrivateRegistry) types.RequestPrivilegeFunc {
@@ -332,4 +424,32 @@ func GetImageRegistryConfig(image string, prsMap map[string]ytypes.PrivateRegist
 		return regAuth, pr.URL, err
 	}
 	return "", "", nil
+}
+
+func convertToSemver(version string) (*semver.Version, error) {
+	compVersion := strings.SplitN(version, ".", 3)
+	if len(compVersion) != 3 {
+		return nil, fmt.Errorf("The default version is not correct")
+	}
+	compVersion[2] = "0"
+	return semver.NewVersion(strings.Join(compVersion, "."))
+}
+
+func isContainerEnvChanged(containerEnv, imageConfigEnv, dockerfileEnv []string) bool {
+	// remove PATH env from the container env
+	allImageEnv := append(imageConfigEnv, dockerfileEnv...)
+	return sliceEqualsIgnoreOrder(allImageEnv, containerEnv)
+}
+
+func GetKubeletDockerConfig(prsMap map[string]ytypes.PrivateRegistry) (string, error) {
+	auths := map[string]authConfig{}
+	for url, pr := range prsMap {
+		auth := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", pr.User, pr.Password)))
+		auths[url] = authConfig{Auth: auth}
+	}
+	cfg, err := json.Marshal(dockerConfig{auths})
+	if err != nil {
+		return "", err
+	}
+	return string(cfg), nil
 }

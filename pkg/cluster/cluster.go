@@ -2,10 +2,8 @@ package cluster
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 
 	"golang.org/x/sync/errgroup"
@@ -14,17 +12,43 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/cert"
 
+	"yunion.io/x/log"
+
 	"yunion.io/yke/pkg/authz"
+	"yunion.io/yke/pkg/cloudprovider"
 	"yunion.io/yke/pkg/docker"
 	"yunion.io/yke/pkg/hosts"
 	"yunion.io/yke/pkg/k8s"
 	"yunion.io/yke/pkg/pki"
 	"yunion.io/yke/pkg/services"
 	"yunion.io/yke/pkg/templates"
-	"yunion.io/yke/pkg/tunnel"
 	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
 )
+
+type Cluster struct {
+	types.KubernetesEngineConfig `yaml:",inline"`
+	ConfigPath                   string
+	LocalKubeConfigPath          string
+	EtcdHosts                    []*hosts.Host
+	WorkerHosts                  []*hosts.Host
+	ControlPlaneHosts            []*hosts.Host
+	InactiveHosts                []*hosts.Host
+	EtcdReadyHosts               []*hosts.Host
+	KubeClient                   *kubernetes.Clientset
+	KubernetesServiceIP          net.IP
+	Certificates                 map[string]pki.CertificatePKI
+	ClusterDomain                string
+	ClusterCIDR                  string
+	ClusterDNSServer             string
+	DockerDialerFactory          hosts.DialerFactory
+	LocalConnDialerFactory       hosts.DialerFactory
+	PrivateRegistriesMap         map[string]types.PrivateRegistry
+	K8sWrapTransport             k8s.WrapTransport
+	UseKubectlDeploy             bool
+	UpdateWorkersOnly            bool
+	CloudConfigFile              string
+	WebhookConfig                string
+}
 
 const (
 	X509AuthenticationProvider = "x509"
@@ -37,30 +61,69 @@ const (
 	LocalNodeHostname          = "localhost"
 	LocalNodeUser              = "root"
 	CloudProvider              = "CloudProvider"
+	ControlPlane               = "controlPlane"
+	WorkerPlane                = "workerPlan"
+	EtcdPlane                  = "etcd"
 )
 
-type Cluster struct {
-	types.KubernetesEngineConfig `yaml:",inline"`
-	ConfigPath                   string
-	LocalKubeConfigPath          string
-	EtcdHosts                    []*hosts.Host
-	WorkerHosts                  []*hosts.Host
-	ControlPlaneHosts            []*hosts.Host
-	InactiveHosts                []*hosts.Host
-	KubeClient                   *kubernetes.Clientset
-	KubernetesServiceIP          net.IP
-	Certificates                 map[string]pki.CertificatePKI
-	ClusterDomain                string
-	ClusterCIDR                  string
-	ClusterDNSServer             string
-	DockerDialerFactory          tunnel.DialerFactory
-	LocalConnDialerFactory       tunnel.DialerFactory
-	PrivateRegistriesMap         map[string]types.PrivateRegistry
-	K8sWrapTransport             k8s.WrapTransport
-	UseKubectlDeploy             bool
-	UpdateWorkersOnly            bool
-	CloudConfigFile              string
-	WebhookConfig                string
+func (c *Cluster) DeployControlPlane(ctx context.Context) error {
+	// Deploy Etcd Plane
+	etcdNodePlanMap := make(map[string]types.ConfigNodePlan)
+	// Build etcd node plan map
+	for _, etcdHost := range c.EtcdHosts {
+		etcdNodePlanMap[etcdHost.Address] = BuildKEConfigNodePlan(ctx, c, etcdHost, etcdHost.DockerInfo)
+	}
+
+	if len(c.Services.Etcd.ExternalURLs) > 0 {
+		log.Infof("[etcd] External etcd connection string has been specified, skipping etcd plane")
+	} else {
+		etcdRollingSnapshot := services.EtcdSnapshot{
+			Snapshot:  c.Services.Etcd.Snapshot,
+			Creation:  c.Services.Etcd.Creation,
+			Retention: c.Services.Etcd.Retention,
+		}
+		if err := services.RunEtcdPlane(ctx, c.EtcdHosts, etcdNodePlanMap, c.LocalConnDialerFactory, c.PrivateRegistriesMap, c.UpdateWorkersOnly, c.SystemImages.Alpine, etcdRollingSnapshot); err != nil {
+			return fmt.Errorf("[etcd] Failed to bring up Etcd Plane: %v", err)
+		}
+	}
+
+	// Deploy Control plane
+	cpNodePlanMap := make(map[string]types.ConfigNodePlan)
+	// buld cp node plan map
+	for _, cpHost := range c.ControlPlaneHosts {
+		cpNodePlanMap[cpHost.Address] = BuildKEConfigNodePlan(ctx, c, cpHost, cpHost.DockerInfo)
+	}
+	if err := services.RunControlPlane(ctx, c.ControlPlaneHosts,
+		c.LocalConnDialerFactory,
+		c.PrivateRegistriesMap,
+		cpNodePlanMap,
+		c.UpdateWorkersOnly,
+		c.SystemImages.Alpine,
+		c.Certificates); err != nil {
+		return fmt.Errorf("[controlPlane] Failed to bring up Control Plane: %v", err)
+	}
+
+	return nil
+}
+
+func (c *Cluster) DeployWorkerPlane(ctx context.Context) error {
+	// Deploy Worker Plane
+	workerNodePlanMap := make(map[string]types.ConfigNodePlan)
+	// Build cp node plan map
+	allHosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
+	for _, workerHost := range allHosts {
+		workerNodePlanMap[workerHost.Address] = BuildKEConfigNodePlan(ctx, c, workerHost, workerHost.DockerInfo)
+	}
+	if err := services.RunWorkerPlane(ctx, allHosts,
+		c.LocalConnDialerFactory,
+		c.PrivateRegistriesMap,
+		workerNodePlanMap,
+		c.Certificates,
+		c.UpdateWorkersOnly,
+		c.SystemImages.Alpine); err != nil {
+		return fmt.Errorf("[workerPlane] Failed to bring up Worker Plane: %v", err)
+	}
+	return nil
 }
 
 func ParseConfig(clusterFile string) (*types.KubernetesEngineConfig, error) {
@@ -76,7 +139,7 @@ func ParseCluster(
 	ctx context.Context,
 	engineConfig *types.KubernetesEngineConfig,
 	clusterFilePath, configDir string,
-	dockerDialerFactory, localConnDialerFactory tunnel.DialerFactory,
+	dockerDialerFactory, localConnDialerFactory hosts.DialerFactory,
 	k8sWrapTransport k8s.WrapTransport,
 ) (*Cluster, error) {
 	var err error
@@ -121,12 +184,31 @@ func ParseCluster(
 		}
 		c.PrivateRegistriesMap[pr.URL] = pr
 	}
-	// parse the cluster config file
-	c.CloudConfigFile, err = c.parseCloudConfig(ctx)
+
+	// Get Cloud Provider
+	p, err := cloudprovider.InitCloudProvider(c.CloudProvider)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse cloud config file: %v", err)
+		return nil, fmt.Errorf("Failed to initialize cloud provider: %v", err)
+	}
+	if p != nil {
+		c.CloudConfigFile, err = p.GenerateCloudConfigFile()
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse cloud config file: %v", err)
+		}
+		c.CloudProvider.Name = p.GetName()
+		if c.CloudProvider.Name == "" {
+			return nil, fmt.Errorf("Name of the cloud provider is not defined for custom provider")
+		}
 	}
 
+	// Create k8s wrap transport for bastion host
+	if len(c.BastionHost.Address) > 0 {
+		var err error
+		c.K8sWrapTransport, err = hosts.BastionHostWrapTransport(c.BastionHost)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return c, nil
 }
 
@@ -163,52 +245,6 @@ func rebuildLocalAdminConfig(ctx context.Context, kubeCluster *Cluster) error {
 	}
 	currentKubeConfig.Config = workingConfig
 	kubeCluster.Certificates[pki.KubeAdminCertName] = currentKubeConfig
-	return nil
-}
-
-func (c *Cluster) parseCloudConfig(ctx context.Context) (string, error) {
-	if len(c.CloudProvider.CloudConfig) == 0 {
-		return "", nil
-	}
-	// handle generic cloud config
-	tmpMap := make(map[string]interface{})
-	for key, value := range c.CloudProvider.CloudConfig {
-		tmpBool, err := strconv.ParseBool(value)
-		if err == nil {
-			tmpMap[key] = tmpBool
-			continue
-		}
-		tmpInt, err := strconv.ParseInt(value, 10, 64)
-		if err == nil {
-			tmpMap[key] = tmpInt
-			continue
-		}
-		tmpFloat, err := strconv.ParseFloat(value, 64)
-		if err == nil {
-			tmpMap[key] = tmpFloat
-			continue
-		}
-		tmpMap[key] = value
-	}
-	jsonString, err := json.MarshalIndent(tmpMap, "", "\n")
-	if err != nil {
-		return "", err
-	}
-	return string(jsonString), nil
-}
-
-func (c *Cluster) parseWebhookConfig(ctx context.Context) error {
-	if c.WebhookAuth.URL == "" {
-		return nil
-	}
-
-	config, err := templates.CompileTemplateFromMap(templates.WebhookAuthTemplate, map[string]string{
-		"URL": c.WebhookAuth.URL,
-	})
-	if err != nil {
-		return fmt.Errorf("Generate webhook auth config error: %v", err)
-	}
-	c.WebhookConfig = config
 	return nil
 }
 
@@ -276,6 +312,19 @@ func ApplyAuthzResources(ctx context.Context, config types.KubernetesEngineConfi
 	return nil
 }
 
+func (c *Cluster) deployAddons(ctx context.Context) error {
+	if err := c.deployK8sAddOns(ctx); err != nil {
+		return err
+	}
+	if err := c.deployUserAddOns(ctx); err != nil {
+		if err, ok := err.(*addonError); ok && err.isCritical {
+			return err
+		}
+		log.Warningf("Failed to deploy addon execute job [%s]: %v", UserAddonsIncludeResourceName, err)
+	}
+	return nil
+}
+
 func (c *Cluster) SyncLabelsAndTaints(ctx context.Context) error {
 	if len(c.ControlPlaneHosts) > 0 {
 		log.Infof("[sync] Syncing nodes Labels and Taints")
@@ -300,24 +349,11 @@ func (c *Cluster) SyncLabelsAndTaints(ctx context.Context) error {
 	return nil
 }
 
-func (c *Cluster) getEtcdProcessHostMap(readyEtcdHosts []*hosts.Host) map[*hosts.Host]types.Process {
-	etcdProcessHostMap := make(map[*hosts.Host]types.Process)
-	for _, host := range c.EtcdHosts {
-		if !host.ToAddEtcdMember {
-			etcdProcessHostMap[host] = c.BuildEtcdProcess(host, readyEtcdHosts)
-		}
-	}
-	return etcdProcessHostMap
-}
-
 func (c *Cluster) PrePullK8sImages(ctx context.Context) error {
 	log.Infof("Pre-pulling kubernetes images")
 	var errgrp errgroup.Group
 	hosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
 	for _, host := range hosts {
-		//if !host.UpdateWorker {
-		//continue
-		//}
 		runHost := host
 		errgrp.Go(func() error {
 			return docker.UseLocalOrPull(ctx, runHost.DClient, runHost.Address, c.SystemImages.Kubernetes, "pre-deploy", c.PrivateRegistriesMap)
@@ -328,65 +364,6 @@ func (c *Cluster) PrePullK8sImages(ctx context.Context) error {
 	}
 	log.Infof("Kubernetes images pulled successfully")
 	return nil
-}
-
-func (c *Cluster) DeployControlPlane(ctx context.Context) error {
-	// Deploy Etcd Plane
-	etcdProcessHostMap := c.getEtcdProcessHostMap(nil)
-	if len(c.Services.Etcd.ExternalURLs) > 0 {
-		log.Infof("[etcd] External etcd connection string has been specified, skipping etcd plane")
-	} else {
-		if err := services.RunEtcdPlane(ctx, c.EtcdHosts, etcdProcessHostMap, c.LocalConnDialerFactory, c.PrivateRegistriesMap, c.UpdateWorkersOnly, c.SystemImages.Alpine); err != nil {
-			return fmt.Errorf("[etcd] Failed to bring up Etcd Plane: %v", err)
-		}
-	}
-
-	// Deploy Control plane
-	processMap := map[string]types.Process{
-		services.SidekickContainerName:       c.BuildSidecarProcess(),
-		services.KubeAPIContainerName:        c.BuildKubeAPIProcess(),
-		services.KubeControllerContainerName: c.BuildKubeControllerProcess(),
-		services.SchedulerContainerName:      c.BuildSchedulerProcess(),
-	}
-	if err := services.RunControlPlane(ctx, c.ControlPlaneHosts,
-		c.LocalConnDialerFactory,
-		c.PrivateRegistriesMap,
-		processMap,
-		c.UpdateWorkersOnly,
-		c.SystemImages.Alpine); err != nil {
-		return fmt.Errorf("[controlPlane] Failed to bring up Control Plane: %v", err)
-	}
-
-	return nil
-}
-
-func (c *Cluster) DeployWorkerPlane(ctx context.Context) error {
-	// Deploy Worker Plane
-	processMap := map[string]types.Process{
-		services.SidekickContainerName:   c.BuildSidecarProcess(),
-		services.KubeproxyContainerName:  c.BuildKubeProxyProcess(),
-		services.NginxProxyContainerName: c.BuildProxyProcess(),
-	}
-	kubeletProcessHostMap := make(map[*hosts.Host]types.Process)
-	for _, host := range hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts) {
-		kubeletProcessHostMap[host] = c.BuildKubeletProcess(host)
-	}
-	allHosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
-	if err := services.RunWorkerPlane(ctx, allHosts,
-		c.LocalConnDialerFactory,
-		c.PrivateRegistriesMap,
-		processMap,
-		kubeletProcessHostMap,
-		c.Certificates,
-		c.UpdateWorkersOnly,
-		c.SystemImages.Alpine); err != nil {
-		return fmt.Errorf("[workerPlane] Failed to bring up Worker Plane: %v", err)
-	}
-	return nil
-}
-
-func (c *Cluster) AllHosts() []*hosts.Host {
-	return hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
 }
 
 func (c *Cluster) ConfigureCluster(
@@ -404,9 +381,21 @@ func (c *Cluster) ConfigureCluster(
 	return nil
 }
 
-func (c *Cluster) deployAddons(ctx context.Context) error {
-	if err := c.deployK8sAddOns(ctx); err != nil {
-		return err
+func (c *Cluster) AllHosts() []*hosts.Host {
+	return hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
+}
+
+func (c *Cluster) parseWebhookConfig(ctx context.Context) error {
+	if c.WebhookAuth.URL == "" {
+		return nil
 	}
-	return c.deployUserAddOns(ctx)
+
+	config, err := templates.CompileTemplateFromMap(templates.WebhookAuthTemplate, map[string]string{
+		"URL": c.WebhookAuth.URL,
+	})
+	if err != nil {
+		return fmt.Errorf("Generate webhook auth config error: %v", err)
+	}
+	c.WebhookConfig = config
+	return nil
 }
