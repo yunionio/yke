@@ -265,7 +265,7 @@ func (c *Cluster) BuildKubeControllerProcess(prefixPath string) types.Process {
 		services.SidekickContainerName,
 	}
 	Binds := []string{
-		fmt.Sprintf("%s:/etc/kubernetes:z", path.Join(prefixPath, "/etc/kuberentes")),
+		fmt.Sprintf("%s:/etc/kubernetes:z", path.Join(prefixPath, "/etc/kubernetes")),
 	}
 
 	for arg, value := range c.Services.KubeController.ExtraArgs {
