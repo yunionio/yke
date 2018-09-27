@@ -7,9 +7,9 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
+	"yunion.io/x/log"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/types"
 )
 
 const (

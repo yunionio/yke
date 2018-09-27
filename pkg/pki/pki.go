@@ -6,18 +6,18 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"path"
+	"path/filepath"
+	"strings"
 
+	"github.com/docker/docker/api/types/container"
 	"k8s.io/client-go/util/cert"
 
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
-)
+	"yunion.io/x/log"
 
-const (
-	etcdRole    = "etcd"
-	controlRole = "controlplane"
-	workerRole  = "worker"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/types"
 )
 
 type CertificatePKI struct {
@@ -35,20 +35,29 @@ type CertificatePKI struct {
 	ConfigPath    string
 }
 
+const (
+	etcdRole            = "etcd"
+	controlRole         = "controlplane"
+	workerRole          = "worker"
+	BundleCertContainer = "yke-bundle-cert"
+)
+
 func GenerateKECerts(ctx context.Context, config types.KubernetesEngineConfig, configPath, configDir string) (map[string]CertificatePKI, error) {
 	certs := make(map[string]CertificatePKI)
 	// generate CA certificate and key
 	log.Infof("[certificates] Generating CA kubernetes certificates")
-	caCrt, caKey, err := generateCACertAndKey()
+	caCrt, caKey, err := GenerateCACertAndKey(CACertName)
 	if err != nil {
 		return nil, err
 	}
 	certs[CACertName] = ToCertObject(CACertName, "", "", caCrt, caKey)
+
 	// generate API certificate and key
 	log.Infof("[certificates] Generating Kubernetes API server certificates")
 	kubernetesServiceIP, err := GetKubernetesServiceIP(config.Services.KubeAPI.ServiceClusterIPRange)
 	clusterDomain := config.Services.Kubelet.ClusterDomain
 	cpHosts := hosts.NodesToHosts(config.Nodes, controlRole)
+	etcdHosts := hosts.NodesToHosts(config.Nodes, etcdRole)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get Kubernetes Service IP: %v", err)
 	}
@@ -134,7 +143,6 @@ func GenerateKECerts(ctx context.Context, config types.KubernetesEngineConfig, c
 		}
 		certs[EtcdClientCACertName] = ToCertObject(EtcdClientCACertName, "", "", caCert[0], nil)
 	}
-	etcdHosts := hosts.NodesToHosts(config.Nodes, etcdRole)
 	etcdAltNames := GetAltNames(etcdHosts, clusterDomain, kubernetesServiceIP, []string{})
 	for _, host := range etcdHosts {
 		log.Infof("[certificates] Generating etcd-%s certificate and key", host.InternalAddress)
@@ -145,6 +153,22 @@ func GenerateKECerts(ctx context.Context, config types.KubernetesEngineConfig, c
 		etcdName := GetEtcdCrtName(host.InternalAddress)
 		certs[etcdName] = ToCertObject(etcdName, "", "", etcdCrt, etcdKey)
 	}
+
+	// generate request header client CA certificate and key
+	log.Infof("[certificates] Generating Kubernetes API server aggregation layer requestheader client CA certificates")
+	requestHeaderCACrt, requestHeaderCAKey, err := GenerateCACertAndKey(RequestHeaderCACertName)
+	if err != nil {
+		return nil, err
+	}
+	certs[RequestHeaderCACertName] = ToCertObject(RequestHeaderCACertName, "", "", requestHeaderCACrt, requestHeaderCAKey)
+
+	// generate API server proxy client key and certs
+	log.Infof("[certificates] Generating Kubernetes API server proxy client certificates")
+	apiserverProxyClientCrt, apiserverProxyClientKey, err := GenerateSignedCertAndKey(requestHeaderCACrt, requestHeaderCAKey, true, APIProxyClientCertName, nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	certs[APIProxyClientCertName] = ToCertObject(APIProxyClientCertName, "", "", apiserverProxyClientCrt, apiserverProxyClientKey)
 
 	return certs, nil
 }
@@ -206,4 +230,77 @@ func RegenerateEtcdCertificate(
 	crtMap[etcdName] = ToCertObject(etcdName, "", "", etcdCrt, etcdKey)
 	log.Infof("[certificates] Successfully generated new etcd-%s certificate and key", etcdHost.InternalAddress)
 	return crtMap, nil
+}
+
+func SaveBackupBundleOnHost(ctx context.Context, host *hosts.Host, alpineSystemImage, etcdSnapshotPath string, prsMap map[string]types.PrivateRegistry) error {
+	imageCfg := &container.Config{
+		Cmd: []string{
+			"sh",
+			"-c",
+			fmt.Sprintf("if [ -d %s ] && [ \"$(ls -A %s)\" ]; then tar czvf %s %s;fi", TempCertPath, TempCertPath, BundleCertPath, TempCertPath),
+		},
+		Image: alpineSystemImage,
+	}
+	hostCfg := &container.HostConfig{
+		Binds: []string{
+			fmt.Sprintf("%s:/etc/kubernetes:z", path.Join(host.PrefixPath, "/etc/kubernetes")),
+			fmt.Sprintf("%s:/backup:z", etcdSnapshotPath),
+		},
+		Privileged: true,
+	}
+	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, BundleCertContainer, host.Address, "certificates", prsMap); err != nil {
+		return err
+	}
+	status, err := docker.WaitForContainer(ctx, host.DClient, host.Address, BundleCertContainer)
+	if err != nil {
+		return err
+	}
+	if status != 0 {
+		return fmt.Errorf("Failed to run certificate bundle compress, exit status is: %d", status)
+	}
+	log.Infof("[certificates] successfully saved certificate bundle [%s/pki.bundle.tar.gz] on host [%s]", etcdSnapshotPath, host.Address)
+	return docker.RemoveContainer(ctx, host.DClient, host.Address, BundleCertContainer)
+}
+
+func ExtractBackupBundleOnHost(ctx context.Context, host *hosts.Host, alpineSystemImage, etcdSnapshotPath string, prsMap map[string]types.PrivateRegistry) error {
+	imageCfg := &container.Config{
+		Cmd: []string{
+			"sh",
+			"-c",
+			fmt.Sprintf(
+				"mkdir -p %s; tar xzvf %s -C %s --strip-components %d",
+				TempCertPath,
+				BundleCertPath,
+				TempCertPath,
+				len(strings.Split(filepath.Clean(TempCertPath), "/"))-1),
+		},
+		Image: alpineSystemImage,
+	}
+	hostCfg := &container.HostConfig{
+		Binds: []string{
+			fmt.Sprintf("%s:/etc/kubernetes:z", path.Join(host.PrefixPath, "/etc/kubernetes")),
+			fmt.Sprintf("%s:/backup:z", etcdSnapshotPath),
+		},
+		Privileged: true,
+	}
+	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, BundleCertContainer, host.Address, "certificates", prsMap); err != nil {
+		return err
+	}
+	status, err := docker.WaitForContainer(ctx, host.DClient, host.Address, BundleCertContainer)
+	if err != nil {
+		return err
+	}
+	if status != 0 {
+		containerLog, err := docker.GetContainerLogsStdoutStderr(ctx, host.DClient, BundleCertContainer, "5", false)
+		if err != nil {
+			return err
+		}
+		// removing the container in case of an error too
+		if err := docker.RemoveContainer(ctx, host.DClient, host.Address, BundleCertContainer); err != nil {
+			return err
+		}
+		return fmt.Errorf("Failed to run certificate bundle extract, exit status is: %d, container logs: %s", status, containerLog)
+	}
+	log.Infof("[certificates] successfully extracted certificate bundle on host [%s] to backup path [%s]", host.Address, TempCertPath)
+	return docker.RemoveContainer(ctx, host.DClient, host.Address, BundleCertContainer)
 }

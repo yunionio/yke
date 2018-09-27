@@ -1,6 +1,6 @@
 package addons
 
-import "yunion.io/yke/pkg/templates"
+import "yunion.io/x/yke/pkg/templates"
 
 func GetNginxIngressManifest(IngressConfig interface{}) (string, error) {
 

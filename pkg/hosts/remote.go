@@ -4,15 +4,13 @@ import (
 	"fmt"
 
 	"github.com/cosiner/socker"
-
-	"yunion.io/yke/pkg/tunnel"
 )
 
 func (h *Host) SSH() (*socker.SSH, error) {
 	var pkey string = h.SSHKey
 	var err error
 	if len(pkey) == 0 {
-		pkey, err = tunnel.PrivateKeyPath(h.SSHKeyPath)
+		pkey, err = privateKeyPath(h.SSHKeyPath)
 		if err != nil {
 			return nil, fmt.Errorf("Get PrivateKey: %v", err)
 		}

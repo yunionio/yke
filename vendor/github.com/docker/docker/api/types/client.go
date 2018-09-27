@@ -1,4 +1,4 @@
-package types // import "github.com/docker/docker/api/types"
+package types
 
 import (
 	"bufio"
@@ -74,7 +74,6 @@ type ContainerLogsOptions struct {
 	ShowStdout bool
 	ShowStderr bool
 	Since      string
-	Until      string
 	Timestamps bool
 	Follow     bool
 	Tail       string

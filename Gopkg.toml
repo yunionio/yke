@@ -1,0 +1,69 @@
+# Gopkg.toml example
+#
+# Refer to https://golang.github.io/dep/docs/Gopkg.toml.html
+# for detailed Gopkg.toml documentation.
+#
+# required = ["github.com/user/thing/cmd/thing"]
+# ignored = ["github.com/user/project/pkgX", "bitbucket.org/user/project/pkgA/pkgY"]
+#
+# [[constraint]]
+#   name = "github.com/user/project"
+#   version = "1.0.0"
+#
+# [[constraint]]
+#   name = "github.com/user/project2"
+#   branch = "dev"
+#   source = "github.com/myfork/project2"
+#
+# [[override]]
+#   name = "github.com/x/y"
+#   version = "2.4.0"
+#
+# [prune]
+#   non-go = false
+#   go-tests = true
+#   unused-packages = true
+
+
+[[constraint]]
+  branch = "master"
+  name = "yunion.io/x/log"
+
+[[constraint]]
+  branch = "master"
+  name = "yunion.io/x/pkg"
+
+# client-go v8.0.0 uses apimachinery 103fd098999dc9c0c88536f5c9ad2e5da39373ae
+# and api 072894a440bdee3a891dea811fe42902311cd2a3 (see Godep.json). go dep
+# is unable to match Godep.json automatically so have to specify here.
+[[constraint]]
+    name = "k8s.io/client-go"
+    version = "v8.0.0"
+
+[[override]]
+    name = "k8s.io/apimachinery"
+    revision = "103fd098999dc9c0c88536f5c9ad2e5da39373ae"
+
+[[override]]
+    name = "k8s.io/api"
+    revision = "072894a440bdee3a891dea811fe42902311cd2a3"
+
+[[override]]
+    name = "github.com/ugorji/go"
+    revision = "f3cacc17c85ecb7f1b6a9e373ee85d1480919868"
+
+[prune]
+  go-tests = true
+  unused-packages = true
+
+[[constraint]]
+    name = "github.com/docker/docker"
+    revision = "ecf4125b85e0faa57d2739348e0d453c1d24d10c"
+
+[[constraint]]
+    name = "github.com/docker/distribution"
+    revision = "3800056b8832cf6075e78b282ac010131d8687bc"
+
+[[constraint]]
+    name = "github.com/docker/go-connections"
+    revision = "3ede32e2033de7505e6500d6c868c2b9ed9f169d"

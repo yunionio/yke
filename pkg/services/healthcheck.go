@@ -12,10 +12,10 @@ import (
 
 	"k8s.io/client-go/util/cert"
 
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/tunnel"
-	"yunion.io/yunioncloud/pkg/log"
+	"yunion.io/x/log"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/pki"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 	HTTPSProtoPrefix = "https://"
 )
 
-func runHealthcheck(ctx context.Context, host *hosts.Host, serviceName string, localConnDialerFactory tunnel.DialerFactory, url string, certMap map[string]pki.CertificatePKI) error {
+func runHealthcheck(ctx context.Context, host *hosts.Host, serviceName string, localConnDialerFactory hosts.DialerFactory, url string, certMap map[string]pki.CertificatePKI) error {
 	log.Infof("[healthcheck] Start Healthcheck on service [%s] on host [%s]", serviceName, host.Address)
 	var x509Pair tls.Certificate
 
@@ -36,6 +36,14 @@ func runHealthcheck(ctx context.Context, host *hosts.Host, serviceName string, l
 	if serviceName == KubeletContainerName {
 		certificate := cert.EncodeCertPEM(certMap[pki.KubeNodeCertName].Certificate)
 		key := cert.EncodePrivateKeyPEM(certMap[pki.KubeNodeCertName].Key)
+		x509Pair, err = tls.X509KeyPair(certificate, key)
+		if err != nil {
+			return err
+		}
+	}
+	if serviceName == KubeAPIContainerName {
+		certificate := cert.EncodeCertPEM(certMap[pki.KubeAPICertName].Certificate)
+		key := cert.EncodePrivateKeyPEM(certMap[pki.KubeAPICertName].Key)
 		x509Pair, err = tls.X509KeyPair(certificate, key)
 		if err != nil {
 			return err
@@ -54,18 +62,24 @@ func runHealthcheck(ctx context.Context, host *hosts.Host, serviceName string, l
 		log.Infof("[healthcheck] service [%s] on host [%s] is healthy", serviceName, host.Address)
 		return nil
 	}
-	return fmt.Errorf("Failed to verify healthcheck: %v", err)
+	log.Debugf("Checking container logs")
+	containerLog, logserr := docker.GetContainerLogsStdoutStderr(ctx, host.DClient, serviceName, "1", false)
+	containerLog = strings.TrimSuffix(containerLog, "\n")
+	if logserr != nil {
+		return fmt.Errorf("Failed to verify healthcheck for service [%s]: %v", serviceName, logserr)
+	}
+	return fmt.Errorf("Failed to verify healthcheck: %v, log: %v", err, containerLog)
 }
 
-func getHealthCheckHTTPClient(host *hosts.Host, port int, localConnDialerFactory tunnel.DialerFactory, x509KeyPair *tls.Certificate) (*http.Client, error) {
+func getHealthCheckHTTPClient(host *hosts.Host, port int, localConnDialerFactory hosts.DialerFactory, x509KeyPair *tls.Certificate) (*http.Client, error) {
 	host.LocalConnPort = port
-	var factory tunnel.DialerFactory
+	var factory hosts.DialerFactory
 	if localConnDialerFactory == nil {
-		factory = tunnel.LocalConnFactory
+		factory = hosts.LocalConnFactory
 	} else {
 		factory = localConnDialerFactory
 	}
-	dialer, err := factory(host.TunnelHostConfig())
+	dialer, err := factory(host)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create a dialer for host [%s]: %v", host.Address, err)
 	}
