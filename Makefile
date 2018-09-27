@@ -1,4 +1,4 @@
-REPO_PREFIX := yunion.io/yke
+REPO_PREFIX := yunion.io/x/yke
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 GIT_VERSION := $(shell git describe --tags --abbrev=14 $(GIT_COMMIT)^{commit})
