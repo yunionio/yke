@@ -3,10 +3,10 @@ package cluster
 import (
 	"context"
 
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/services"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/pki"
+	"yunion.io/x/yke/pkg/services"
+	"yunion.io/x/yke/pkg/types"
 )
 
 func (c *Cluster) ClusterRemove(ctx context.Context) error {
@@ -35,7 +35,6 @@ func (c *Cluster) ClusterRemove(ctx context.Context) error {
 	}
 
 	pki.RemoveAdminConfig(ctx, c.LocalKubeConfigPath)
-	pki.RemoveYunionUserConfig(ctx, c.LocalKubeYunionUserConfigPath)
 	return nil
 }
 

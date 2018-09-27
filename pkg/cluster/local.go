@@ -1,8 +1,8 @@
 package cluster
 
 import (
-	"yunion.io/yke/pkg/services"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/services"
+	"yunion.io/x/yke/pkg/types"
 )
 
 func GetLocalConfig() *types.KubernetesEngineConfig {

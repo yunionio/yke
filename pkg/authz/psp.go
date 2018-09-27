@@ -3,9 +3,10 @@ package authz
 import (
 	"context"
 
-	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/templates"
-	"yunion.io/yunioncloud/pkg/log"
+	"yunion.io/x/log"
+
+	"yunion.io/x/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/templates"
 )
 
 func ApplyDefaultPodSecurityPolicy(ctx context.Context, kubeConfigPath string, k8sWrapTransport k8s.WrapTransport) error {

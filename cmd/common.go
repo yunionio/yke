@@ -8,13 +8,17 @@ import (
 
 	"github.com/urfave/cli"
 
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/types"
 )
 
-var sshCliOptions = []cli.Flag{
+var commonFlags = []cli.Flag{
 	cli.BoolFlag{
 		Name:  "ssh-agent-auth",
 		Usage: "Use SSH Agent Auth defined by SSH_AUTH_SOCK",
+	},
+	cli.BoolFlag{
+		Name:  "ignore-docker-version",
+		Usage: "Disable Docker version check",
 	},
 }
 
@@ -28,8 +32,21 @@ func setOptionsFromCLI(c *cli.Context, config *types.KubernetesEngineConfig) (*t
 
 func resolveClusterFile(ctx *cli.Context) (string, string, error) {
 	clusterFile := ctx.String("config")
-	clusterFileBuff, err := ReadFile(clusterFile)
-	return clusterFileBuff, clusterFile, err
+	fp, err := filepath.Abs(clusterFile)
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to lookup current directory name: %v", err)
+	}
+	file, err := os.Open(fp)
+	if err != nil {
+		return "", "", fmt.Errorf("Can't find cluster configuration file: %v", err)
+	}
+	defer file.Close()
+	buf, err := ioutil.ReadAll(file)
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to read file: %v", err)
+	}
+	clusterFileBuff := string(buf)
+	return clusterFileBuff, clusterFile, nil
 }
 
 func ReadFile(path string) (string, error) {

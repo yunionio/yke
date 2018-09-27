@@ -1,6 +1,6 @@
 package addons
 
-import "yunion.io/yke/pkg/templates"
+import "yunion.io/x/yke/pkg/templates"
 
 const (
 	KubeDNSImage           = "KubeDNSImage"
@@ -9,9 +9,11 @@ const (
 	KubeDNSAutoScalerImage = "KubeDNSAutoScalerImage"
 	KubeDNSServer          = "ClusterDNSServer"
 	KubeDNSClusterDomain   = "ClusterDomain"
+	MetricsServerImage     = "MetricsServerImage"
+	RBAC                   = "RBAC"
+	MetricsServerOptions   = "MetricsServerOptions"
 )
 
 func GetKubeDNSManifest(kubeDNSConfig map[string]string) (string, error) {
-
 	return templates.CompileTemplateFromMap(templates.KubeDNSTemplate, kubeDNSConfig)
 }
