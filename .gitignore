@@ -32,3 +32,4 @@ bin
 .ropeproject
 build
 *.rpm
+.vscode

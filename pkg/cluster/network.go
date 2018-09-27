@@ -1,10 +1,8 @@
 package cluster
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"strings"
 
@@ -12,11 +10,12 @@ import (
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/sync/errgroup"
 
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/templates"
-	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
+	"yunion.io/x/log"
+
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/templates"
+	"yunion.io/x/yke/pkg/types"
 )
 
 const (
@@ -94,6 +93,10 @@ var WorkerPortList = []string{
 	KubeletPort,
 }
 
+var EtcdClientPortList = []string{
+	EtcdPort1,
+}
+
 func (c *Cluster) deployNetworkPlugin(ctx context.Context) error {
 	log.Infof("[network] Setting up network plugin: %s", c.Network.Plugin)
 	switch c.Network.Plugin {
@@ -121,7 +124,7 @@ func (c *Cluster) doYunionDeploy(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = c.doAddonDeploy(ctx, pluginYaml, NetworkPluginResourceName)
+	err = c.doAddonDeploy(ctx, pluginYaml, NetworkPluginResourceName, true)
 	if err != nil {
 		return fmt.Errorf("Deploy yunion cni container: %v", err)
 	}
@@ -156,10 +159,12 @@ func (c *Cluster) CheckClusterPorts(ctx context.Context, currentCluster *Cluster
 	if err := c.runServicePortChecks(ctx); err != nil {
 		return err
 	}
-	if c.K8sWrapTransport == nil {
+	if c.K8sWrapTransport == nil && len(c.BastionHost.Address) == 0 {
 		if err := c.checkKubeAPIPort(ctx); err != nil {
 			return err
 		}
+	} else {
+		log.Infof("[network] Skipping kubeapi port check")
 	}
 
 	return c.removeTCPPortListeners(ctx)
@@ -182,30 +187,18 @@ func (c *Cluster) checkKubeAPIPort(ctx context.Context) error {
 func (c *Cluster) deployTCPPortListeners(ctx context.Context, currentCluster *Cluster) error {
 	log.Infof("[network] Deploying port listener containers")
 
-	etcdHosts := []*hosts.Host{}
-	cpHosts := []*hosts.Host{}
-	workerHosts := []*hosts.Host{}
-	if currentCluster != nil {
-		etcdHosts = hosts.GetToAddHosts(currentCluster.EtcdHosts, c.EtcdHosts)
-		cpHosts = hosts.GetToAddHosts(currentCluster.ControlPlaneHosts, c.ControlPlaneHosts)
-		workerHosts = hosts.GetToAddHosts(currentCluster.WorkerHosts, c.WorkerHosts)
-	} else {
-		etcdHosts = c.EtcdHosts
-		cpHosts = c.ControlPlaneHosts
-		workerHosts = c.WorkerHosts
-	}
 	// deploy ectd listeners
-	if err := c.deployListenerOnPlane(ctx, EtcdPortList, etcdHosts, EtcdPortListenContainer); err != nil {
+	if err := c.deployListenerOnPlane(ctx, EtcdPortList, c.EtcdHosts, EtcdPortListenContainer); err != nil {
 		return err
 	}
 
 	// deploy controlplane listeners
-	if err := c.deployListenerOnPlane(ctx, ControlPlanePortList, cpHosts, CPPortListenContainer); err != nil {
+	if err := c.deployListenerOnPlane(ctx, ControlPlanePortList, c.ControlPlaneHosts, CPPortListenContainer); err != nil {
 		return err
 	}
 
 	// deploy worker listeners
-	if err := c.deployListenerOnPlane(ctx, WorkerPortList, workerHosts, WorkerPortListenContainer); err != nil {
+	if err := c.deployListenerOnPlane(ctx, WorkerPortList, c.WorkerHosts, WorkerPortListenContainer); err != nil {
 		return err
 	}
 	log.Infof("[network] Port listener containers deployed successfully")
@@ -298,7 +291,7 @@ func (c *Cluster) runServicePortChecks(ctx context.Context) error {
 			return err
 		}
 	}
-	// check all -> etcd connectivity
+	// check control -> etcd connectivity
 	log.Infof("[network] Running control plane -> etcd port checks")
 	for _, host := range c.ControlPlaneHosts {
 		runHost := host
@@ -346,11 +339,14 @@ func checkPlaneTCPPortsFromHost(ctx context.Context, host *hosts.Host, portList 
 		Cmd: []string{
 			"sh",
 			"-c",
-			"for host in $HOSTS; do for port in $PORTS ; do nc -z $host $port > /dev/null || echo $host $port ; done; done",
+			"for host in $HOSTS; do for port in $PORTS ; do echo \"Checking host ${host} on port ${port}\" >&1 & nc -w 5 -z $host $port > /dev/null || echo \"${host}:${port}\" >&2 & done; wait; done",
 		},
 	}
 	hostCfg := &container.HostConfig{
 		NetworkMode: "host",
+		LogConfig: container.LogConfig{
+			Type: "json-file",
+		},
 	}
 	if err := docker.DoRemoveContainer(ctx, host.DClient, PortCheckContainer, host.Address); err != nil {
 		return err
@@ -358,38 +354,22 @@ func checkPlaneTCPPortsFromHost(ctx context.Context, host *hosts.Host, portList 
 	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, PortCheckContainer, host.Address, "network", prsMap); err != nil {
 		return err
 	}
-	if err := docker.WaitForContainer(ctx, host.DClient, host.Address, PortCheckContainer); err != nil {
-		return err
+
+	containerLog, logsErr := docker.GetContainerLogsStdoutStderr(ctx, host.DClient, PortCheckContainer, "all", true)
+	if logsErr != nil {
+		log.Warningf("[network] Failed to get network port check logs: %v", logsErr)
 	}
-	logs, err := docker.ReadContainerLogs(ctx, host.DClient, PortCheckContainer)
-	if err != nil {
-		return err
-	}
-	defer logs.Close()
+	log.Debugf("[network] containerLog [%s] on host: %s", containerLog, host.Address)
+
 	if err := docker.RemoveContainer(ctx, host.DClient, host.Address, PortCheckContainer); err != nil {
 		return err
 	}
-	portCheckLogs, err := getPortCheckLogs(logs)
-	if err != nil {
-		return err
-	}
-	if len(portCheckLogs) > 0 {
-		return fmt.Errorf("[network] Port check for ports: [%s] failed on host: [%s]", strings.Join(portCheckLogs, ", "), host.Address)
+	log.Debugf("[network] Length of containerLog is [%d] on host: %s", len(containerLog), host.Address)
+	if len(containerLog) > 0 {
+		portCheckLogs := strings.Join(strings.Split(strings.TrimSpace(containerLog), "\n"), ", ")
+		return fmt.Errorf("[network] Host [%s] is not able to connect to the following ports: [%s]. Please check network policies and firewall rules", host.Address, portCheckLogs)
 	}
 	return nil
-}
-
-func getPortCheckLogs(reader io.ReadCloser) ([]string, error) {
-	logLines := bufio.NewScanner(reader)
-	hostPortLines := []string{}
-	for logLines.Scan() {
-		logLine := strings.Split(logLines.Text(), " ")
-		hostPortLines = append(hostPortLines, fmt.Sprintf("%s:%s", logLine[0], logLine[1]))
-	}
-	if err := logLines.Err(); err != nil {
-		return nil, err
-	}
-	return hostPortLines, nil
 }
 
 func getPortBindings(hostAddress string, portList []string) []nat.PortBinding {

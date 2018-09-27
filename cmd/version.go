@@ -7,8 +7,8 @@ import (
 
 	"github.com/urfave/cli"
 
-	"yunion.io/yke/pkg/cluster"
-	"yunion.io/yke/pkg/pki"
+	"yunion.io/x/yke/pkg/cluster"
+	"yunion.io/x/yke/pkg/pki"
 )
 
 var (

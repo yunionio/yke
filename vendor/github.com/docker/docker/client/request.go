@@ -1,4 +1,4 @@
-package client // import "github.com/docker/docker/client"
+package client
 
 import (
 	"bytes"
@@ -123,7 +123,10 @@ func (cli *Client) sendRequest(ctx context.Context, method, path string, query u
 	if err != nil {
 		return resp, err
 	}
-	return resp, cli.checkResponseErr(resp)
+	if err := cli.checkResponseErr(resp); err != nil {
+		return resp, err
+	}
+	return resp, nil
 }
 
 func (cli *Client) doRequest(ctx context.Context, req *http.Request) (serverResponse, error) {

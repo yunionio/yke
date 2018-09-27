@@ -5,13 +5,22 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/tunnel"
-	"yunion.io/yke/pkg/types"
-	"yunion.io/yunioncloud/pkg/log"
+	"yunion.io/x/log"
+
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/pki"
+	"yunion.io/x/yke/pkg/types"
 )
 
-func RunControlPlane(ctx context.Context, controlHosts []*hosts.Host, localConnDialerFactory tunnel.DialerFactory, prsMap map[string]types.PrivateRegistry, processMap map[string]types.Process, updateWorkersOnly bool, alpineImage string) error {
+func RunControlPlane(
+	ctx context.Context,
+	controlHosts []*hosts.Host,
+	localConnDialerFactory hosts.DialerFactory,
+	prsMap map[string]types.PrivateRegistry,
+	cpNodePlanMap map[string]types.ConfigNodePlan,
+	updateWorkersOnly bool,
+	alpineImage string,
+	certMap map[string]pki.CertificatePKI) error {
 	log.Infof("[%s] Building up Controller Plane..", ControlRole)
 	var errgrp errgroup.Group
 	for _, host := range controlHosts {
@@ -20,7 +29,7 @@ func RunControlPlane(ctx context.Context, controlHosts []*hosts.Host, localConnD
 			continue
 		}
 		errgrp.Go(func() error {
-			return doDeployControlHost(ctx, runHost, localConnDialerFactory, prsMap, processMap, alpineImage)
+			return doDeployControlHost(ctx, runHost, localConnDialerFactory, prsMap, cpNodePlanMap[runHost.Address].Processes, alpineImage, certMap)
 		})
 	}
 	if err := errgrp.Wait(); err != nil {
@@ -71,7 +80,15 @@ func RemoveControlPlane(ctx context.Context, controlHosts []*hosts.Host, force b
 	return nil
 }
 
-func doDeployControlHost(ctx context.Context, host *hosts.Host, localConnDialerFactory tunnel.DialerFactory, prsMap map[string]types.PrivateRegistry, processMap map[string]types.Process, alpineImage string) error {
+func doDeployControlHost(
+	ctx context.Context,
+	host *hosts.Host,
+	localConnDialerFactory hosts.DialerFactory,
+	prsMap map[string]types.PrivateRegistry,
+	processMap map[string]types.Process,
+	alpineImage string,
+	certMap map[string]pki.CertificatePKI,
+) error {
 	if host.IsWorker {
 		if err := removeNginxProxy(ctx, host); err != nil {
 			return err
@@ -82,7 +99,7 @@ func doDeployControlHost(ctx context.Context, host *hosts.Host, localConnDialerF
 		return err
 	}
 	// run kubeapi
-	if err := runKubeAPI(ctx, host, localConnDialerFactory, prsMap, processMap[KubeAPIContainerName], alpineImage); err != nil {
+	if err := runKubeAPI(ctx, host, localConnDialerFactory, prsMap, processMap[KubeAPIContainerName], alpineImage, certMap); err != nil {
 		return err
 	}
 	// run kubecontroller

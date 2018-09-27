@@ -10,8 +10,8 @@ import (
 
 	"k8s.io/client-go/util/cert"
 
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/types"
 )
 
 func GenerateSignedCertAndKey(
@@ -52,13 +52,13 @@ func GenerateSignedCertAndKey(
 	return clientCert, rootKey, nil
 }
 
-func generateCACertAndKey() (*x509.Certificate, *rsa.PrivateKey, error) {
+func GenerateCACertAndKey(commonName string) (*x509.Certificate, *rsa.PrivateKey, error) {
 	rootKey, err := cert.NewPrivateKey()
 	if err != nil {
 		return nil, nil, fmt.Errorf("Failed to generate private key for CA certificate: %v", err)
 	}
 	caConfig := cert.Config{
-		CommonName: CACertName,
+		CommonName: commonName,
 	}
 	kubeCACert, err := cert.NewSelfSignedCACert(caConfig, rootKey)
 	if err != nil {
@@ -234,6 +234,8 @@ func getControlCertKeys() []string {
 		KubeNodeCertName,
 		EtcdClientCertName,
 		EtcdClientCACertName,
+		RequestHeaderCACertName,
+		APIProxyClientCertName,
 	}
 }
 
@@ -282,16 +284,6 @@ func GetLocalKubeConfig(configPath, configDir string) string {
 	fileName := filepath.Base(configPath)
 	baseDir += "/"
 	return fmt.Sprintf("%s%s%s", baseDir, KubeAdminConfigPrefix, fileName)
-}
-
-func GetLocalYunionKubeConfig(configPath, configDir string) string {
-	baseDir := filepath.Dir(configPath)
-	if len(configDir) > 0 {
-		baseDir = filepath.Dir(configDir)
-	}
-	fileName := filepath.Base(configPath)
-	baseDir += "/"
-	return fmt.Sprintf("%s%s%s", baseDir, KubeYunionConfigPrefix, fileName)
 }
 
 func strCrtToEnv(crtName, crt string) string {
