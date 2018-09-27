@@ -23,7 +23,7 @@ import (
 	"yunion.io/x/log"
 	"yunion.io/x/pkg/util/sets"
 
-	ytypes "yunion.io/yke/pkg/types"
+	ytypes "yunion.io/x/yke/pkg/types"
 )
 
 const (

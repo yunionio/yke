@@ -10,11 +10,11 @@ import (
 
 	"yunion.io/x/log"
 
-	"yunion.io/yke/pkg/cluster"
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/cluster"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/pki"
+	"yunion.io/x/yke/pkg/types"
 )
 
 var clusterFilePath string

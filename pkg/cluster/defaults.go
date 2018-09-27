@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"yunion.io/x/log"
-	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/services"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/services"
+	"yunion.io/x/yke/pkg/types"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"yunion.io/yke/pkg/types/image"
+	"yunion.io/x/yke/pkg/types/image"
 )
 
 const (

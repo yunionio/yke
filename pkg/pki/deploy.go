@@ -16,9 +16,9 @@ import (
 
 	"yunion.io/x/log"
 
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/hosts"
-	ytypes "yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	ytypes "yunion.io/x/yke/pkg/types"
 )
 
 const (

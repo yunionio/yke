@@ -7,7 +7,7 @@ import (
 	"net"
 	"testing"
 
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/types"
 )
 
 const (

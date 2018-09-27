@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"yunion.io/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/hosts"
 )
 
 func (c *Cluster) CleanDeadLogs(ctx context.Context) error {

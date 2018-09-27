@@ -13,9 +13,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"yunion.io/x/log"
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/types"
 )
 
 type Host struct {

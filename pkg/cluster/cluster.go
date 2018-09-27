@@ -14,15 +14,15 @@ import (
 
 	"yunion.io/x/log"
 
-	"yunion.io/yke/pkg/authz"
-	"yunion.io/yke/pkg/cloudprovider"
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/services"
-	"yunion.io/yke/pkg/templates"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/authz"
+	"yunion.io/x/yke/pkg/cloudprovider"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/pki"
+	"yunion.io/x/yke/pkg/services"
+	"yunion.io/x/yke/pkg/templates"
+	"yunion.io/x/yke/pkg/types"
 )
 
 type Cluster struct {

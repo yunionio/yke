@@ -10,10 +10,10 @@ import (
 
 	"yunion.io/x/log"
 
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/services"
-	ytypes "yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/pki"
+	"yunion.io/x/yke/pkg/services"
+	ytypes "yunion.io/x/yke/pkg/types"
 )
 
 const (

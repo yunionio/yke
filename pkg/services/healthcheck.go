@@ -13,9 +13,9 @@ import (
 	"k8s.io/client-go/util/cert"
 
 	"yunion.io/x/log"
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/pki"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/pki"
 )
 
 const (

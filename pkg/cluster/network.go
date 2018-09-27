@@ -12,10 +12,10 @@ import (
 
 	"yunion.io/x/log"
 
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/templates"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/templates"
+	"yunion.io/x/yke/pkg/types"
 )
 
 const (

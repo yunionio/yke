@@ -3,9 +3,9 @@ package services
 import (
 	"context"
 
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/types"
 )
 
 func runScheduler(ctx context.Context, host *hosts.Host, df hosts.DialerFactory, prsMap map[string]types.PrivateRegistry, schedulerProcess types.Process, alpineImage string) error {

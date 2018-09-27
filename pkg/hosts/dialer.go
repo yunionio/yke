@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/types"
 )
 
 const (

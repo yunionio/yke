@@ -15,8 +15,8 @@ import (
 
 	"yunion.io/x/log"
 
-	"yunion.io/yke/pkg/addons"
-	"yunion.io/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/addons"
+	"yunion.io/x/yke/pkg/k8s"
 )
 
 const (

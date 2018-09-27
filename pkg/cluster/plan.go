@@ -14,12 +14,12 @@ import (
 	ref "github.com/docker/distribution/reference"
 	dtypes "github.com/docker/docker/api/types"
 
-	"yunion.io/yke/pkg/docker"
-	"yunion.io/yke/pkg/hosts"
-	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/pki"
-	"yunion.io/yke/pkg/services"
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/docker"
+	"yunion.io/x/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/pki"
+	"yunion.io/x/yke/pkg/services"
+	"yunion.io/x/yke/pkg/types"
 )
 
 const (

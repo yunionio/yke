@@ -8,7 +8,7 @@ import (
 
 	"github.com/urfave/cli"
 
-	"yunion.io/yke/pkg/types"
+	"yunion.io/x/yke/pkg/types"
 )
 
 var commonFlags = []cli.Flag{

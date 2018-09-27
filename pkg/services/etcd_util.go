@@ -14,7 +14,7 @@ import (
 
 	"yunion.io/x/log"
 
-	"yunion.io/yke/pkg/hosts"
+	"yunion.io/x/yke/pkg/hosts"
 )
 
 func getEtcdClient(ctx context.Context, etcdHost *hosts.Host, localConnDialerFactory hosts.DialerFactory, cert, key []byte) (etcdclient.Client, error) {

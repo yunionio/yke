@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
-	"yunion.io/yke/pkg/services"
+	"yunion.io/x/yke/pkg/services"
 )
 
 func (c *Cluster) ValidateCluster() error {

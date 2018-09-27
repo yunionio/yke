@@ -7,7 +7,7 @@ import (
 
 	"yunion.io/x/log"
 
-	"yunion.io/yke/cmd"
+	"yunion.io/x/yke/cmd"
 )
 
 func main() {

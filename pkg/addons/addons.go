@@ -6,8 +6,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"yunion.io/yke/pkg/k8s"
-	"yunion.io/yke/pkg/templates"
+	"yunion.io/x/yke/pkg/k8s"
+	"yunion.io/x/yke/pkg/templates"
 )
 
 func GetAddonsExcuteJob(addonName, nodeName, image string) (string, error) {
