@@ -161,6 +161,20 @@ func IsContainerRunning(ctx context.Context, dClient *client.Client, hostname, c
 	return false, nil
 }
 
+func GetK8sContainer(ctx context.Context, dClient *client.Client) ([]types.Container, error) {
+	containers, err := dClient.ContainerList(ctx, types.ContainerListOptions{All: true})
+	if err != nil {
+		return nil, err
+	}
+	k8sContainers := []types.Container{}
+	for _, container := range containers {
+		if _, ok := container.Labels["io.kubernetes.pod.name"]; ok {
+			k8sContainers = append(k8sContainers, container)
+		}
+	}
+	return k8sContainers, nil
+}
+
 func localImageExists(ctx context.Context, dClient *client.Client, hostname string, containerImage string) (bool, error) {
 	log.Debugf("Checking if image [%s] exists on host [%s]", containerImage, hostname)
 	_, _, err := dClient.ImageInspectWithRaw(ctx, containerImage)

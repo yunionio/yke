@@ -80,6 +80,9 @@ func RemoveWorkerPlane(ctx context.Context, workerHosts []*hosts.Host, force boo
 		if err := removeSidekick(ctx, host); err != nil {
 			return err
 		}
+		if err := removeK8sContainer(ctx, host); err != nil {
+			return err
+		}
 		log.Infof("[%s] Successfully tore down Worker Plane..", WorkerRole)
 	}
 

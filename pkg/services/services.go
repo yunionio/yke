@@ -81,6 +81,21 @@ func removeSidekick(ctx context.Context, host *hosts.Host) error {
 	return docker.DoRemoveContainer(ctx, host.DClient, SidekickContainerName, host.Address)
 }
 
+func removeK8sContainer(ctx context.Context, host *hosts.Host) error {
+	containers, err := docker.GetK8sContainer(ctx, host.DClient)
+	if err != nil {
+		return nil
+	}
+	for _, container := range containers {
+		err = docker.DoRemoveContainer(ctx, host.DClient, container.Names[0], host.Address)
+		if err != nil {
+			log.Errorf("Remove k8s container %#v error: %v", container, err)
+			return err
+		}
+	}
+	return nil
+}
+
 func GetProcessConfig(process types.Process) (*container.Config, *container.HostConfig, string) {
 	imageCfg := &container.Config{
 		Entrypoint: process.Command,
