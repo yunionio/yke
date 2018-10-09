@@ -13,7 +13,7 @@ import (
 const (
 	DefaultRetries          = 5
 	DefaultSleepSeconds     = 10
-	DefaultTimeout          = 30
+	DefaultTimeout          = 300
 	K8sWrapTransportTimeout = 30
 )
 
