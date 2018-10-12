@@ -35,12 +35,11 @@ func (c *Cluster) SaveClusterState(ctx context.Context, config *types.Kubernetes
 		if err != nil {
 			return fmt.Errorf("[state] Failed to save configuration state: %v", err)
 		}
-		// save state to cluster nodes as a backup
-		uniqueHosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
-		err = saveStateToNodes(ctx, uniqueHosts, config, c.SystemImages.Alpine, c.PrivateRegistriesMap)
-		if err != nil {
-			return fmt.Errorf("[state] Failed to save configuration state to nodes: %v", err)
-		}
+	}
+	// save state to cluster nodes as a backup
+	uniqueHosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
+	if err := saveStateToNodes(ctx, uniqueHosts, config, c.SystemImages.Alpine, c.PrivateRegistriesMap); err != nil {
+		return fmt.Errorf("[state] Failed to save configuration state to nodes: %v", err)
 	}
 	return nil
 }
