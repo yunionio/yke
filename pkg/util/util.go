@@ -3,7 +3,7 @@ package util
 import (
 	"strings"
 
-	"github.com/Masterminds/semver"
+	"github.com/coreos/go-semver/semver"
 )
 
 func StrToSemVer(version string) (*semver.Version, error) {
