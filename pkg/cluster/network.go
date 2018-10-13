@@ -126,7 +126,7 @@ func (c *Cluster) doYunionDeploy(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = c.doAddonDeploy(ctx, pluginYaml, NetworkPluginResourceName, true)
+	err = c.doAddonDeploy(ctx, pluginYaml, NetworkPluginResourceName, true, false)
 	if err != nil {
 		return fmt.Errorf("Deploy yunion cni container: %v", err)
 	}
