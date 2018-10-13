@@ -45,7 +45,7 @@ rules:
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: yunion-config
+  name: yunion-cni-config
   namespace: kube-system
 data:
   cni-conf.json: |
@@ -71,18 +71,23 @@ data:
 kind: DaemonSet
 apiVersion: extensions/v1beta1
 metadata:
-  name: yunion
+  name: yunion-cni
   namespace: kube-system
   labels:
-    k8s-app: yunion
+    k8s-app: yunion-cni
 spec:
   template:
     metadata:
       labels:
-        k8s-app: yunion
+        k8s-app: yunion-cni
     spec:
       serviceAccountName: yunion
       hostNetwork: true
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
       containers:
         # Runs yunion/cni container on each Kubernetes node.
         # This container installs the Yunion CNI binaries
@@ -95,7 +100,7 @@ spec:
           - name: CNI_NETWORK_CONFIG
             valueFrom:
               configMapKeyRef:
-                name: yunion-config
+                name: yunion-cni-config
                 key: cni-conf.json
           - name: CNI_CONF_NAME
             value: "10-yunion.conf"
@@ -108,9 +113,9 @@ spec:
         - name: host-cni-net
           hostPath:
             path: /etc/cni/net.d
-        - name: yunion-config
+        - name: yunion-cni-config
           configMap:
-            name: yunion-config
+            name: yunion-cni-config
         - name: host-cni-bin
           hostPath:
             path: /opt/cni/bin
