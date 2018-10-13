@@ -77,7 +77,8 @@ const (
 	NodeImage        = "NodeImage"
 	ControllersImage = "ControllersImage"
 
-	RBACConfig = "RBACConfig"
+	RBACConfig     = "RBACConfig"
+	ClusterVersion = "ClusterVersion"
 )
 
 var EtcdPortList = []string{
@@ -119,6 +120,7 @@ func (c *Cluster) doYunionDeploy(ctx context.Context) error {
 		"YunionAdminProject": c.Network.Options[YunionAdminProject],
 		"YunionRegion":       c.Network.Options[YunionRegion],
 		"YunionKubeCluster":  c.Network.Options[YunionKubeCluster],
+		ClusterVersion:       getTagMajorVersion(c.Version),
 	}
 	pluginYaml, err := c.getNetworkPluginManifest(yunionConfig)
 	if err != nil {
