@@ -53,6 +53,15 @@ func ApplyK8sSystemJob(jobYaml, kubeConfigPath string, k8sWrapTransport WrapTran
 	return retryToWithTimeout(ensureJobCompleted, k8sClient, job, timeout)
 }
 
+func ApplyK8sSystemJobAsync(jobYaml, kubeConfigPath string, k8sWrapTransport WrapTransport, timeout int, addonUpdated bool) {
+	go func() {
+		err := ApplyK8sSystemJob(jobYaml, kubeConfigPath, k8sWrapTransport, timeout, addonUpdated)
+		if err != nil {
+			log.Errorf("[k8s] Async apply job error: %v", err)
+		}
+	}()
+}
+
 func DeleteK8sSystemJob(jobYaml string, k8sClient *kubernetes.Clientset, timeout int) error {
 	job := v1.Job{}
 	if err := decodeYamlResource(&job, jobYaml); err != nil {
