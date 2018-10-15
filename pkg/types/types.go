@@ -94,6 +94,8 @@ type SystemImages struct {
 	Kubernetes string `yaml:"kubernetes" json:"kubernetes"`
 	// Yunion CNI image
 	YunionCNI string `yaml:"yunion_cni" json:"yunionCni"`
+	// Yunion CSI image
+	YunionCSI string `yaml:"yunion_csi" json:"YunionCsi"`
 	// Pod infra container image
 	PodInfraContainer string `yaml:"pod_infra_container" json:"podInfraContainer"`
 	// Ingress Controller image

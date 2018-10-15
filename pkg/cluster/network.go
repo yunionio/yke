@@ -110,17 +110,17 @@ func (c *Cluster) deployNetworkPlugin(ctx context.Context) error {
 
 func (c *Cluster) doYunionDeploy(ctx context.Context) error {
 	yunionConfig := map[string]string{
-		ClusterCIDR:          c.ClusterCIDR,
-		RBACConfig:           c.Authorization.Mode,
-		CNIImage:             c.SystemImages.YunionCNI,
-		"YunionBridge":       c.Network.Options[YunionBridge],
-		"YunionAuthURL":      c.Network.Options[YunionAuthURL],
-		"YunionAdminUser":    c.Network.Options[YunionAdminUser],
-		"YunionAdminPasswd":  c.Network.Options[YunionAdminPasswd],
-		"YunionAdminProject": c.Network.Options[YunionAdminProject],
-		"YunionRegion":       c.Network.Options[YunionRegion],
-		"YunionKubeCluster":  c.Network.Options[YunionKubeCluster],
-		ClusterVersion:       getTagMajorVersion(c.Version),
+		ClusterCIDR:                  c.ClusterCIDR,
+		RBACConfig:                   c.Authorization.Mode,
+		CNIImage:                     c.SystemImages.YunionCNI,
+		templates.YunionBridge:       c.Network.Options[YunionBridge],
+		templates.YunionAuthURL:      c.Network.Options[YunionAuthURL],
+		templates.YunionAdminUser:    c.Network.Options[YunionAdminUser],
+		templates.YunionAdminPasswd:  c.Network.Options[YunionAdminPasswd],
+		templates.YunionAdminProject: c.Network.Options[YunionAdminProject],
+		templates.YunionRegion:       c.Network.Options[YunionRegion],
+		templates.YunionKubeCluster:  c.Network.Options[YunionKubeCluster],
+		ClusterVersion:               getTagMajorVersion(c.Version),
 	}
 	pluginYaml, err := c.getNetworkPluginManifest(yunionConfig)
 	if err != nil {
