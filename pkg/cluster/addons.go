@@ -23,6 +23,7 @@ const (
 	KubeDNSAddonResourceName      = "yke-kubedns-addon"
 	UserAddonResourceName         = "yke-user-addon"
 	IngressAddonResourceName      = "yke-ingress-controller"
+	YunionCSIAddonResourceName    = "yke-yunion-csi-addon"
 	UserAddonsIncludeResourceName = "yke-user-includes-addons"
 
 	IngressAddonJobName            = "yke-ingress-controller-deploy-job"
@@ -45,6 +46,15 @@ type MetricsServerOptions struct {
 	Options            map[string]string
 	MetricsServerImage string
 	Version            string
+}
+
+type YunionCSIOptions struct {
+	YunionAuthURL      string
+	YunionAdminUser    string
+	YunionAdminPasswd  string
+	YunionAdminProject string
+	YunionRegion       string
+	CSIImage           string
 }
 
 type addonError struct {
@@ -76,6 +86,12 @@ func (c *Cluster) deployK8sAddOns(ctx context.Context) error {
 			return err
 		}
 		log.Warningf("Failed to deploy addon execute job [%s]: %v", IngressAddonResourceName, err)
+	}
+	if err := c.deployYunionCSI(ctx); err != nil {
+		if err, ok := err.(*addonError); ok && err.isCritical {
+			return err
+		}
+		log.Warningf("Failed to deploy addon execute job [%s]: %v", YunionCSIAddonResourceName, err)
 	}
 	return nil
 }
@@ -385,5 +401,27 @@ func (c *Cluster) deployIngress(ctx context.Context) error {
 		return err
 	}
 	log.Infof("[ingress] ingress controller %s is successfully deployed", c.Ingress.Provider)
+	return nil
+}
+
+func (c *Cluster) deployYunionCSI(ctx context.Context) error {
+	log.Infof("[addons] Setting up Yunion CSI plugin")
+	// TODO: make yunion auth info options to global options
+	csiConfig := YunionCSIOptions{
+		YunionAuthURL:      c.Network.Options[YunionAuthURL],
+		YunionAdminUser:    c.Network.Options[YunionAdminUser],
+		YunionAdminPasswd:  c.Network.Options[YunionAdminPasswd],
+		YunionAdminProject: c.Network.Options[YunionAdminProject],
+		YunionRegion:       c.Network.Options[YunionRegion],
+		CSIImage:           c.SystemImages.YunionCSI,
+	}
+	csiYaml, err := addons.GetYunionCSIManifest(csiConfig)
+	if err != nil {
+		return err
+	}
+	if err := c.doAddonDeployAsync(ctx, csiYaml, YunionCSIAddonResourceName, false); err != nil {
+		return err
+	}
+	log.Infof("[addons] YunionCSI deployed successfully...")
 	return nil
 }
