@@ -50,7 +50,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: csi-attacher
-    namespace: default
+    namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: external-attacher-runner
@@ -150,7 +150,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: csi-provisioner
-    namespace: default
+    namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: external-provisioner-runner
@@ -248,7 +248,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: csi-nodeplugin
-    namespace: default
+    namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: csi-nodeplugin
