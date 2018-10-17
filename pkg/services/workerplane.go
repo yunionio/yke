@@ -77,6 +77,9 @@ func RemoveWorkerPlane(ctx context.Context, workerHosts []*hosts.Host, force boo
 		if err := removeNginxProxy(ctx, host); err != nil {
 			return err
 		}
+		if err := removeLXCFS(ctx, host); err != nil {
+			return err
+		}
 		if err := removeSidekick(ctx, host); err != nil {
 			return err
 		}
@@ -100,6 +103,10 @@ func doDeployWorkerPlane(ctx context.Context, host *hosts.Host,
 	}
 	// run sidekick
 	if err := runSidekick(ctx, host, prsMap, processMap[SidekickContainerName]); err != nil {
+		return err
+	}
+	// run lxcfs
+	if err := runLXCFS(ctx, host, prsMap, processMap[LXCFSContainerName]); err != nil {
 		return err
 	}
 	// run kubelet
