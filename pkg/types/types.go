@@ -95,6 +95,10 @@ type SystemImages struct {
 	// Yunion CNI image
 	YunionCNI string `yaml:"yunion_cni" json:"yunionCni"`
 	// Yunion CSI image
+	CSIAttacher    string `yaml:"csi_attacher" json:"csiAttacher"`
+	CSIProvisioner string `yaml:"csi_provisioner" json:"csiProvisioner"`
+	CSIRegistrar   string `yaml:"csi_registrar" json"csiRegistrar"`
+
 	YunionCSI string `yaml:"yunion_csi" json:"yunionCsi"`
 	// Yunion LXCFS Image
 	LXCFS            string `yaml:"lxcfs" json:"lxcfs"`
