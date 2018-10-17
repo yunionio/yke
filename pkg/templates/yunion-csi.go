@@ -94,7 +94,7 @@ spec:
           env:
             - name: ADDRESS
               value: /var/lib/kubelet/plugins/csi-yunionplugin/csi.sock
-          imagePullPolicy: "IfNotPresent"
+          imagePullPolicy: "Always"
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi-yunionplugin
@@ -193,10 +193,11 @@ spec:
             - "--csi-address=$(ADDRESS)"
             - "--v=5"
             - "--connection-timeout=30s"
+            - "--feature-gates=Topology=true"
           env:
             - name: ADDRESS
               value: /var/lib/kubelet/plugins/csi-yunionplugin/csi.sock
-          imagePullPolicy: "IfNotPresent"
+          imagePullPolicy: "Always"
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi-yunionplugin
