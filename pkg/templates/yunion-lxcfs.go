@@ -2,54 +2,6 @@ package templates
 
 const YunionLXCFSTemplate = `
 ---
-apiVersion: apps/v1beta2
-kind: DaemonSet
-metadata:
-  name: lxcfs
-  labels:
-    app: lxcfs
-    lxcfs: "false"
-spec:
-  selector:
-    matchLabels:
-      app: lxcfs
-  template:
-    metadata:
-      labels:
-        app: lxcfs
-        lxcfs: "false"
-    spec:
-      hostPID: true
-      hostNetwork: true
-      tolerations:
-      - key: node-role.kubernetes.io/master
-        effect: NoSchedule
-      containers:
-      - name: lxcfs
-        image: {{.LXCFSImage}}
-        imagePullPolicy: Always
-        securityContext:
-          privileged: true
-        volumeMounts:
-        - name: cgroup
-          mountPath: /sys/fs/cgroup
-        - name: lxcfs
-          mountPath: /var/lib/lxcfs
-          mountPropagation: Bidirectional
-        - name: dev
-          mountPath: /dev
-      volumes:
-      - name: cgroup
-        hostPath:
-          path: /sys/fs/cgroup
-      - name: lxcfs
-        hostPath:
-          path: /var/lib/lxcfs
-          type: DirectoryOrCreate
-      - name: dev
-        hostPath:
-          path: /dev
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
