@@ -33,6 +33,7 @@ const (
 	EtcdRestoreContainerName      = "etcd-restore"
 	NginxProxyContainerName       = "nginx-proxy"
 	SidekickContainerName         = "service-sidekick"
+	LXCFSContainerName            = "lxcfs"
 	LogLinkContainerName          = "log-linker"
 	LogCleanerContainerName       = "log-cleaner"
 
@@ -79,6 +80,18 @@ func runSidekick(ctx context.Context, host *hosts.Host, prsMap map[string]types.
 
 func removeSidekick(ctx context.Context, host *hosts.Host) error {
 	return docker.DoRemoveContainer(ctx, host.DClient, SidekickContainerName, host.Address)
+}
+
+func runLXCFS(ctx context.Context, host *hosts.Host, prsMap map[string]types.PrivateRegistry, lxcfsProcess types.Process) error {
+	imageCfg, hostCfg, _ := GetProcessConfig(lxcfsProcess)
+	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, LXCFSContainerName, host.Address, WorkerRole, prsMap); err != nil {
+		return err
+	}
+	return nil
+}
+
+func removeLXCFS(ctx context.Context, host *hosts.Host) error {
+	return docker.DoRemoveContainer(ctx, host.DClient, LXCFSContainerName, host.Address)
 }
 
 func removeK8sContainer(ctx context.Context, host *hosts.Host) error {
