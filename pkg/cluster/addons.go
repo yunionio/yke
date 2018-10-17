@@ -55,6 +55,9 @@ type YunionCSIOptions struct {
 	YunionAdminPasswd  string
 	YunionAdminProject string
 	YunionRegion       string
+	CSIAttacher        string
+	CSIProvisioner     string
+	CSIRegistrar       string
 	CSIImage           string
 }
 
@@ -425,6 +428,9 @@ func (c *Cluster) deployYunionCSI(ctx context.Context) error {
 		YunionAdminPasswd:  c.Network.Options[YunionAdminPasswd],
 		YunionAdminProject: c.Network.Options[YunionAdminProject],
 		YunionRegion:       c.Network.Options[YunionRegion],
+		CSIAttacher:        c.SystemImages.CSIAttacher,
+		CSIProvisioner:     c.SystemImages.CSIProvisioner,
+		CSIRegistrar:       c.SystemImages.CSIRegistrar,
 		CSIImage:           c.SystemImages.YunionCSI,
 	}
 	csiYaml, err := addons.GetYunionCSIManifest(csiConfig)
