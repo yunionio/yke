@@ -83,10 +83,38 @@ func removeSidekick(ctx context.Context, host *hosts.Host) error {
 }
 
 func runLXCFS(ctx context.Context, host *hosts.Host, prsMap map[string]types.PrivateRegistry, lxcfsProcess types.Process) error {
+	isRunning, err := docker.IsContainerRunning(ctx, host.DClient, host.Address, SidekickContainerName, true)
+	if err != nil {
+		return err
+	}
+
 	imageCfg, hostCfg, _ := GetProcessConfig(lxcfsProcess)
 	if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, LXCFSContainerName, host.Address, WorkerRole, prsMap); err != nil {
 		return err
 	}
+	isUpgradable := false
+	if isRunning {
+		isUpgradable, err = docker.IsContainerUpgradable(ctx, host.DClient, imageCfg, hostCfg, LXCFSContainerName, host.Address, LXCFSContainerName)
+		if err != nil {
+			return err
+		}
+		if !isUpgradable {
+			log.Infof("[%s] Sidekick container already created on host [%s]", LXCFSContainerName, host.Address)
+			return nil
+		}
+	}
+	if err := docker.UseLocalOrPull(ctx, host.DClient, host.Address, lxcfsProcess.Image, LXCFSContainerName, prsMap); err != nil {
+		return err
+	}
+	if isUpgradable {
+		if err := docker.DoRemoveContainer(ctx, host.DClient, LXCFSContainerName, host.Address); err != nil {
+			return err
+		}
+	}
+	if _, err := docker.CreateContainer(ctx, host.DClient, host.Address, LXCFSContainerName, imageCfg, hostCfg); err != nil {
+		return err
+	}
+
 	return nil
 }
 
