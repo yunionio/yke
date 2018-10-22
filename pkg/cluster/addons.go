@@ -62,7 +62,6 @@ type YunionCSIOptions struct {
 }
 
 type YunionLXCFSOptions struct {
-	LXCFSImage     string
 	LXCFSInitImage string
 }
 
@@ -445,9 +444,11 @@ func (c *Cluster) deployYunionCSI(ctx context.Context) error {
 }
 
 func (c *Cluster) deployYunionLXCFS(ctx context.Context) error {
+	if enableLxcfs := ctx.Value("enable-lxcfs"); enableLxcfs == nil || !enableLxcfs.(bool) {
+		return nil
+	}
 	log.Infof("[addons] Setting up Yunion LXCFS plugin")
 	lxcfsConfig := YunionLXCFSOptions{
-		LXCFSImage:     c.SystemImages.LXCFS,
 		LXCFSInitImage: c.SystemImages.LXCFSInitializer,
 	}
 	yaml, err := addons.GetYunionLXCFSManifest(lxcfsConfig)

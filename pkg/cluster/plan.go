@@ -59,7 +59,6 @@ func BuildKEConfigNodePlan(ctx context.Context, myCluster *Cluster, host *hosts.
 	processes[services.SidekickContainerName] = myCluster.BuildSidecarProcess()
 	processes[services.KubeletContainerName] = myCluster.BuildKubeletProcess(host, prefixPath)
 	processes[services.KubeproxyContainerName] = myCluster.BuildKubeProxyProcess(host, prefixPath)
-	processes[services.LXCFSContainerName] = myCluster.BuildLXCFSProcess()
 
 	portChecks = append(portChecks, BuildPortChecksFromPortList(host, WorkerPortList, ProtocolTCP)...)
 	// Do we need an nginxProxy for this one ?
@@ -446,30 +445,6 @@ func (c *Cluster) BuildKubeletProcess(host *hosts.Host, prefixPath string) types
 		ImageRegistryAuthConfig: registryAuthConfig,
 		Labels: map[string]string{
 			ContainerNameLabel: services.KubeletContainerName,
-		},
-	}
-}
-
-func (c *Cluster) BuildLXCFSProcess() types.Process {
-	registryAuthConfig, _, _ := docker.GetImageRegistryConfig(c.SystemImages.LXCFS, c.PrivateRegistriesMap)
-	binds := []string{
-		"/sys/fs/cgroup:/sys/fs/cgroup:ro",
-		"/dev:/dev:ro",
-		"/var/lib/lxcfs:/var/lib/lxcfs:shared,z",
-	}
-	return types.Process{
-		Name:                    services.LXCFSContainerName,
-		Command:                 []string{"/start.sh"},
-		Binds:                   binds,
-		Privileged:              true,
-		PidMode:                 "host",
-		NetworkMode:             "host",
-		RestartPolicy:           "always",
-		Image:                   c.SystemImages.LXCFS,
-		HealthCheck:             types.HealthCheck{},
-		ImageRegistryAuthConfig: registryAuthConfig,
-		Labels: map[string]string{
-			ContainerNameLabel: services.LXCFSContainerName,
 		},
 	}
 }

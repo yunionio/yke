@@ -101,7 +101,6 @@ type SystemImages struct {
 
 	YunionCSI string `yaml:"yunion_csi" json:"yunionCsi"`
 	// Yunion LXCFS Image
-	LXCFS            string `yaml:"lxcfs" json:"lxcfs"`
 	LXCFSInitializer string `yaml:"lxcfs_initializer" json:"lxcfsInitializer"`
 	// Pod infra container image
 	PodInfraContainer string `yaml:"pod_infra_container" json:"podInfraContainer"`
