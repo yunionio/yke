@@ -107,7 +107,6 @@ spec:
         k8s-app: metrics-server
     spec:
       serviceAccountName: metrics-server
-      hostNetwork: true
       containers:
       - name: metrics-server
         image: {{ .MetricsServerImage }}

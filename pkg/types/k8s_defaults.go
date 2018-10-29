@@ -151,7 +151,7 @@ func init() {
 			continue
 		}
 
-		longName := "rancher/hyperkube:" + version
+		longName := fmt.Sprintf("%s/hyperkube:%s", image.YunionMirror, version)
 		if !strings.HasPrefix(longName, images.Kubernetes) {
 			panic(fmt.Sprintf("For K8s version %q, the Kubernetes image tag should be a substring of %q, currently it is %q", version, version, images.Kubernetes))
 		}
