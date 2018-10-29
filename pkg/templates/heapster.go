@@ -17,8 +17,8 @@ roleRef:
   kind: ClusterRole
   name: system:heapster
 subjects:
-  - kind: ServiceAccount
-    name: heapster
+- kind: ServiceAccount
+  name: heapster
   namespace: kube-system
 
 ---
