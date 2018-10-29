@@ -279,14 +279,15 @@ type WebhookAuth struct {
 }
 
 type YunionConfig struct {
-	AuthURL       string `yaml:"auth_url" json:"authUrl"`
-	AdminUser     string `yaml:"admin_user" json:"adminUser"`
-	AdminPassword string `yaml:"admin_password" json:"adminPassword"`
-	AdminProject  string `yaml:"admin_project" json:"adminProject"`
-	Region        string `yaml:"region" json:"region"`
-	KubeCluster   string `yaml:"kube_cluster" json:"kubeCluster"`
-	HostBridge    string `yaml:"host_bridge" json:"hostBridge"`
-	InfluxdbUrl   string `yaml:"influxdb_url" json:"influxdbUrl"`
+	AuthURL        string `yaml:"auth_url" json:"authUrl"`
+	AdminUser      string `yaml:"admin_user" json:"adminUser"`
+	AdminPassword  string `yaml:"admin_password" json:"adminPassword"`
+	AdminProject   string `yaml:"admin_project" json:"adminProject"`
+	Region         string `yaml:"region" json:"region"`
+	KubeCluster    string `yaml:"kube_cluster" json:"kubeCluster"`
+	HostBridge     string `yaml:"host_bridge" json:"hostBridge"`
+	InfluxdbUrl    string `yaml:"influxdb_url" json:"influxdbUrl"`
+	DockerGraphDir string `yaml:"docker_graph_dir" json:"dockerGraphDir"`
 }
 
 type IngressConfig struct {

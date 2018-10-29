@@ -128,6 +128,9 @@ func (c *Cluster) SetUpHosts(ctx context.Context) error {
 		if err := deployAdminConfig(ctx, hosts, c.Certificates[pki.KubeAdminCertName].Config, c.SystemImages.Alpine, c.PrivateRegistriesMap); err != nil {
 			return err
 		}
+		if err := deployLogrotateConfig(ctx, hosts, c.SystemImages.Alpine, c.YunionConfig.DockerGraphDir, c.PrivateRegistriesMap); err != nil {
+			return err
+		}
 		log.Infof("[certificates] Successfully deployed kubernetes certificates to Cluster nodes")
 		if c.CloudProvider.Name != "" {
 			if err := deployCloudProviderConfig(ctx, hosts, c.SystemImages.Alpine, c.PrivateRegistriesMap, c.CloudConfigFile); err != nil {
