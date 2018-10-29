@@ -43,6 +43,8 @@ type KubernetesEngineConfig struct {
 	Monitoring MonitoringConfig `yaml:"monitoring" json:"monitoring,omitempty"`
 	// WebhookConfig options
 	WebhookAuth WebhookAuth `yaml:"webhook_auth" json:"webhookAuth"`
+	// Yunion related options
+	YunionConfig YunionConfig `yaml:"yunion_config" json:"yunionConfig"`
 }
 
 type BastionHost struct {
@@ -113,13 +115,13 @@ type SystemImages struct {
 	//// Dashboard image
 	//Dashboard string `yaml:"dashboard" json:"dashboard"`
 	//// Heapster addon image
-	//Heapster string `yaml:"heapster" json:"heapster"`
+	Heapster string `yaml:"heapster" json:"heapster"`
 	//// Grafana image for heapster addon
 	//Grafana string `yaml:"grafana" json:"grafana"`
 	//// Influxdb image for heapster addon
 	//Influxdb string `yaml:"influxdb" json:"influxdb"`
 	//// Tiller addon image
-	//Tiller string `yaml:"tiller" json:"tiller"`
+	Tiller string `yaml:"tiller" json:"tiller"`
 }
 
 type ConfigNode struct {
@@ -274,6 +276,17 @@ type AuthzConfig struct {
 
 type WebhookAuth struct {
 	URL string `yaml:"url" json:"url"`
+}
+
+type YunionConfig struct {
+	AuthURL       string `yaml:"auth_url" json:"authUrl"`
+	AdminUser     string `yaml:"admin_user" json:"adminUser"`
+	AdminPassword string `yaml:"admin_password" json:"adminPassword"`
+	AdminProject  string `yaml:"admin_project" json:"adminProject"`
+	Region        string `yaml:"region" json:"region"`
+	KubeCluster   string `yaml:"kube_cluster" json:"kubeCluster"`
+	HostBridge    string `yaml:"host_bridge" json:"hostBridge"`
+	InfluxdbUrl   string `yaml:"influxdb_url" json:"influxdbUrl"`
 }
 
 type IngressConfig struct {
