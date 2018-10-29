@@ -492,7 +492,7 @@ func (c *Cluster) deployHeapster(ctx context.Context) error {
 		HeapsterImage: c.SystemImages.Heapster,
 		InfluxdbUrl:   c.YunionConfig.InfluxdbUrl,
 	}
-	yaml, err := addons.GetTillerManifest(config)
+	yaml, err := addons.GetHeapsterManifest(config)
 	if err != nil {
 		return err
 	}
