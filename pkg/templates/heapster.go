@@ -47,7 +47,7 @@ spec:
         command:
         - /heapster
         - --source=kubernetes.summary_api
-        - --sink={{ .InfluxdbUrl }}
+        - --sink=influxdb:{{ .InfluxdbUrl }}
         volumeMounts:
         - mountPath: /etc/ssl/certs
           name: ssl-certs
