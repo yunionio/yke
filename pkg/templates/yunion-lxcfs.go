@@ -53,6 +53,7 @@ spec:
       name: lxcfs-initializer
     spec:
       serviceAccountName: lxcfs-initializer-service-account
+      hostNetwork: true
       containers:
         - name: lxcfs-initializer
           image: {{.LXCFSInitImage}}
