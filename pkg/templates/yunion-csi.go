@@ -81,6 +81,7 @@ spec:
   template:
     metadata:
       labels:
+        lxcfs: "false"
         app: csi-yunionplugin-attacher
     spec:
       serviceAccount: csi-attacher
@@ -181,6 +182,7 @@ spec:
   template:
     metadata:
       labels:
+        lxcfs: "false"
         app: csi-yunionplugin-provisioner
     spec:
       serviceAccount: csi-provisioner
@@ -267,6 +269,7 @@ spec:
   template:
     metadata:
       labels:
+        lxcfs: "false"
         app: csi-yunionplugin
     spec:
       serviceAccount: csi-nodeplugin

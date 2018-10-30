@@ -9,11 +9,13 @@ metadata:
   namespace: kube-system
   labels:
     k8s-app: kube-dns-autoscaler
+    lxcfs: "false"
 spec:
   template:
     metadata:
       labels:
         k8s-app: kube-dns-autoscaler
+        lxcfs: "false"
     spec:
       serviceAccountName: kube-dns-autoscaler
       containers:
@@ -92,6 +94,7 @@ metadata:
   namespace: kube-system
   labels:
     k8s-app: kube-dns
+    lxcfs: "false"
     kubernetes.io/cluster-service: "true"
     addonmanager.kubernetes.io/mode: Reconcile
 spec:
@@ -110,6 +113,7 @@ spec:
     metadata:
       labels:
         k8s-app: kube-dns
+        lxcfs: "false"
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
