@@ -121,7 +121,8 @@ type SystemImages struct {
 	//// Influxdb image for heapster addon
 	//Influxdb string `yaml:"influxdb" json:"influxdb"`
 	//// Tiller addon image
-	Tiller string `yaml:"tiller" json:"tiller"`
+	Tiller             string `yaml:"tiller" json:"tiller"`
+	YunionCloudMonitor string `yaml:"yunion_cloud_monitor" json:"yunionCloudMonitor"`
 }
 
 type ConfigNode struct {
