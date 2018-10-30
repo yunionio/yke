@@ -32,6 +32,7 @@ const (
 	MetricsServerAddonResourceName = "yke-metrics-addon"
 	TillerAddonResourceName        = "yke-tiller-addon"
 	HeapsterAddonResourceName      = "yke-heapster-addon"
+	YunionCloudMonResourceName     = "yke-yunion-cloudmon-addon"
 )
 
 type ingressOptions struct {
@@ -76,6 +77,17 @@ type HeapsterOptions struct {
 	InfluxdbUrl   string
 }
 
+type YunionCloudMonOptions struct {
+	YunionAuthURL           string
+	YunionDomain            string
+	YunionAdminUser         string
+	YunionAdminPasswd       string
+	YunionAdminProject      string
+	YunionRegion            string
+	InfluxdbUrl             string
+	YunionCloudMonitorImage string
+}
+
 type addonError struct {
 	err        error
 	isCritical bool
@@ -107,6 +119,7 @@ func (c *Cluster) deployK8sAddOns(ctx context.Context) error {
 		YunionLXCFSAddonResourceName: c.deployYunionLXCFS,
 		TillerAddonResourceName:      c.deployTiller,
 		HeapsterAddonResourceName:    c.deployHeapster,
+		YunionCloudMonResourceName:   c.deployYunionCloudMon,
 	} {
 		if err := df(ctx); err != nil {
 			if err, ok := err.(*addonError); ok && err.isCritical {
@@ -500,5 +513,28 @@ func (c *Cluster) deployHeapster(ctx context.Context) error {
 		return err
 	}
 	log.Infof("[addons] Heapster deployed successfully...")
+	return nil
+}
+
+func (c *Cluster) deployYunionCloudMon(ctx context.Context) error {
+	log.Infof("[addons] setting up yunion cloud monitor plugin")
+	config := YunionCloudMonOptions{
+		YunionAuthURL:           c.YunionConfig.AuthURL,
+		YunionDomain:            "Default",
+		YunionAdminUser:         c.YunionConfig.AdminUser,
+		YunionAdminPasswd:       c.YunionConfig.AdminPassword,
+		YunionAdminProject:      c.YunionConfig.AdminProject,
+		YunionRegion:            c.YunionConfig.Region,
+		YunionCloudMonitorImage: c.SystemImages.YunionCloudMonitor,
+		InfluxdbUrl:             c.YunionConfig.InfluxdbUrl,
+	}
+	yaml, err := addons.GetYunionCloudMoniotrManifest(config)
+	if err != nil {
+		return err
+	}
+	if err := c.doAddonDeployAsync(ctx, yaml, YunionCloudMonResourceName, false); err != nil {
+		return err
+	}
+	log.Infof("[addons] Yunion cloud monitor deployed successfully...")
 	return nil
 }
