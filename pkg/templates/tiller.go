@@ -28,6 +28,7 @@ metadata:
   labels:
     app: helm
     name: tiller
+    lxcfs: "false"
   name: tiller-deploy
   namespace: kube-system
 spec:
@@ -36,6 +37,7 @@ spec:
       labels:
         app: helm
         name: tiller
+        lxcfs: "false"
     spec:
       automountServiceAccountToken: true
       hostNetwork: true

@@ -30,11 +30,13 @@ metadata:
   labels:
     k8s-app: heapster
     module: apiserver
+    lxcfs: "false"
     version: v6
 spec:
   template:
     metadata:
       labels:
+        lxcfs: "false"
         k8s-app: heapster
         module: apiserver
         version: v6

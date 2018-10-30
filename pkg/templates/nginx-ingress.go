@@ -253,6 +253,7 @@ metadata:
   name: default-http-backend
   labels:
     app: default-http-backend
+    lxcfs: "false"
   namespace: ingress-nginx
 spec:
   replicas: 1
@@ -260,6 +261,7 @@ spec:
     metadata:
       labels:
         app: default-http-backend
+        lxcfs: "false"
     spec:
       terminationGracePeriodSeconds: 60
       containers:

@@ -96,6 +96,7 @@ metadata:
   namespace: kube-system
   labels:
     k8s-app: metrics-server
+    lxcfs: "false"
 spec:
   selector:
     matchLabels:
@@ -105,6 +106,7 @@ spec:
       name: metrics-server
       labels:
         k8s-app: metrics-server
+        lxcfs: "false"
     spec:
       serviceAccountName: metrics-server
       containers:
