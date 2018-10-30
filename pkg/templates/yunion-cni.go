@@ -75,10 +75,12 @@ metadata:
   namespace: kube-system
   labels:
     k8s-app: yunion-cni
+    lxcfs: "false"
 spec:
   template:
     metadata:
       labels:
+        lxcfs: "false"
         k8s-app: yunion-cni
     spec:
       serviceAccountName: yunion
