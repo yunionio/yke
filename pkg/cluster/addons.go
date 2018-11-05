@@ -24,7 +24,6 @@ const (
 	UserAddonResourceName         = "yke-user-addon"
 	IngressAddonResourceName      = "yke-ingress-controller"
 	YunionCSIAddonResourceName    = "yke-yunion-csi-addon"
-	YunionLXCFSAddonResourceName  = "yke-yunion-lxcfs-addon"
 	UserAddonsIncludeResourceName = "yke-user-includes-addons"
 
 	IngressAddonJobName            = "yke-ingress-controller-deploy-job"
@@ -62,10 +61,6 @@ type YunionCSIOptions struct {
 	CSIProvisioner     string
 	CSIRegistrar       string
 	CSIImage           string
-}
-
-type YunionLXCFSOptions struct {
-	LXCFSInitImage string
 }
 
 type TillerOptions struct {
@@ -114,12 +109,11 @@ func (c *Cluster) deployK8sAddOns(ctx context.Context) error {
 	}
 
 	for key, df := range map[string]func(ctx context.Context) error{
-		IngressAddonResourceName:     c.deployIngress,
-		YunionCSIAddonResourceName:   c.deployYunionCSI,
-		YunionLXCFSAddonResourceName: c.deployYunionLXCFS,
-		TillerAddonResourceName:      c.deployTiller,
-		HeapsterAddonResourceName:    c.deployHeapster,
-		YunionCloudMonResourceName:   c.deployYunionCloudMon,
+		IngressAddonResourceName:   c.deployIngress,
+		YunionCSIAddonResourceName: c.deployYunionCSI,
+		TillerAddonResourceName:    c.deployTiller,
+		HeapsterAddonResourceName:  c.deployHeapster,
+		YunionCloudMonResourceName: c.deployYunionCloudMon,
 	} {
 		if err := df(ctx); err != nil {
 			if err, ok := err.(*addonError); ok && err.isCritical {
@@ -461,25 +455,6 @@ func (c *Cluster) deployYunionCSI(ctx context.Context) error {
 		return err
 	}
 	log.Infof("[addons] YunionCSI deployed successfully...")
-	return nil
-}
-
-func (c *Cluster) deployYunionLXCFS(ctx context.Context) error {
-	if enableLxcfs := ctx.Value("enable-lxcfs"); enableLxcfs == nil || !enableLxcfs.(bool) {
-		return nil
-	}
-	log.Infof("[addons] Setting up Yunion LXCFS plugin")
-	lxcfsConfig := YunionLXCFSOptions{
-		LXCFSInitImage: c.SystemImages.LXCFSInitializer,
-	}
-	yaml, err := addons.GetYunionLXCFSManifest(lxcfsConfig)
-	if err != nil {
-		return err
-	}
-	if err := c.doAddonDeployAsync(ctx, yaml, YunionLXCFSAddonResourceName, false); err != nil {
-		return err
-	}
-	log.Infof("[addons] YunionLXCFS deployed successfully...")
 	return nil
 }
 
