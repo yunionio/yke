@@ -28,7 +28,7 @@ func (h *Host) WriteHostFile(ctx context.Context, contName, absPath, content, al
 		Cmd: []string{
 			"sh",
 			"-c",
-			fmt.Sprintf("if [ ! -f %s ]; then echo -e \"$%s\" > %s;fi", absPath, ConfigEnv, absPath),
+			fmt.Sprintf("echo -e \"$%s\" > %s", ConfigEnv, absPath),
 		},
 		Env: containerEnv,
 	}
