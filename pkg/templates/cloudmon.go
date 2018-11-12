@@ -39,7 +39,7 @@ data:
   application.properties: |
     debug=false
     trace=false
-    logging.level.com.yunion=DEBUG
+    logging.level.com.yunion=INFO
 
     yunion.rc.auth.url={{.YunionAuthURL}}
     yunion.rc.auth.domain={{.YunionDomain}}
