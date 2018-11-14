@@ -48,6 +48,7 @@ type Cluster struct {
 	UpdateWorkersOnly            bool
 	CloudConfigFile              string
 	WebhookConfig                string
+	SchedulerPolicyConfig        string
 }
 
 const (
@@ -161,6 +162,11 @@ func ParseCluster(
 	// parse WebhookConfig
 	if err := c.parseWebhookConfig(ctx); err != nil {
 		return nil, fmt.Errorf("Failed to parse webhook config: %v", err)
+	}
+
+	// parse SchedulerPolicyConfig
+	if err := c.parseSchedulerConfig(ctx); err != nil {
+		return nil, fmt.Errorf("Failed to parse scheduler config: %v", err)
 	}
 
 	if err := c.ValidateCluster(); err != nil {
@@ -409,5 +415,17 @@ func (c *Cluster) parseWebhookConfig(ctx context.Context) error {
 		return fmt.Errorf("Generate webhook auth config error: %v", err)
 	}
 	c.WebhookConfig = config
+	return nil
+}
+
+func (c *Cluster) parseSchedulerConfig(ctx context.Context) error {
+	if c.YunionConfig.SchedulerUrl == "" {
+		return nil
+	}
+	config, err := templates.CompileTemplateFromMap(templates.SchedulerPolicyConfigTemplate, map[string]string{"SchedulerUrl": c.YunionConfig.SchedulerUrl})
+	if err != nil {
+		return fmt.Errorf("Generate scheduler policy config error: %v", err)
+	}
+	c.SchedulerPolicyConfig = config
 	return nil
 }
