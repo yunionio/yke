@@ -287,6 +287,7 @@ type YunionConfig struct {
 	HostBridge     string `yaml:"host_bridge" json:"hostBridge"`
 	InfluxdbUrl    string `yaml:"influxdb_url" json:"influxdbUrl"`
 	DockerGraphDir string `yaml:"docker_graph_dir" json:"dockerGraphDir"`
+	SchedulerUrl   string `yaml:"scheduler_url" json:"schedulerUrl"`
 }
 
 type IngressConfig struct {
