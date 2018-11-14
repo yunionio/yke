@@ -146,6 +146,11 @@ func (c *Cluster) SetUpHosts(ctx context.Context) error {
 		}
 		log.Infof("[%s] Successfully deployed kubernetes webhook file to Cluster nodes", WebhookConfigDeployer)
 	}
+	if c.SchedulerPolicyConfig != "" {
+		if err := deploySchedulerConfig(ctx, c.ControlPlaneHosts, c.SystemImages.Alpine, c.SchedulerPolicyConfig, c.PrivateRegistriesMap); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

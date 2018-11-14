@@ -13,6 +13,7 @@ metadata:
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: csi-yunionplugin
 reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
 
 ---
 
@@ -142,6 +143,9 @@ rules:
   - apiGroups: ["snapshot.storage.k8s.io"]
     resources: ["volumesnapshotcontents"]
     verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "update", "patch"]
 
 ---
 kind: ClusterRoleBinding
