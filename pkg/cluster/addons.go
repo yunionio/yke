@@ -20,7 +20,6 @@ import (
 )
 
 const (
-	KubeDNSAddonResourceName      = "yke-kubedns-addon"
 	UserAddonResourceName         = "yke-user-addon"
 	IngressAddonResourceName      = "yke-ingress-controller"
 	YunionCSIAddonResourceName    = "yke-yunion-csi-addon"
@@ -34,6 +33,8 @@ const (
 	YunionCloudMonResourceName     = "yke-yunion-cloudmon-addon"
 )
 
+var DNSProviders = []string{"kubedns", "coredns"}
+
 type ingressOptions struct {
 	RBACConfig     string
 	Options        map[string]string
@@ -42,6 +43,30 @@ type ingressOptions struct {
 	AlpineImage    string
 	IngressImage   string
 	IngressBackend string
+}
+
+type CoreDNSOptions struct {
+	RBACConfig             string
+	CoreDNSImage           string
+	CoreDNSAutoScalerImage string
+	ClusterDomain          string
+	ClusterDNSServer       string
+	ReverseCIDRs           []string
+	UpstreamNameservers    []string
+	NodeSelector           map[string]string
+}
+
+type KubeDNSOptions struct {
+	RBACConfig             string
+	KubeDNSImage           string
+	DNSMasqImage           string
+	KubeDNSAutoScalerImage string
+	KubeDNSSidecarImage    string
+	ClusterDomain          string
+	ClusterDNSServer       string
+	ReverseCIDRs           []string
+	UpstreamNameservers    []string
+	NodeSelector           map[string]string
 }
 
 type MetricsServerOptions struct {
@@ -92,12 +117,16 @@ func (e *addonError) Error() string {
 	return e.err.Error()
 }
 
+func getAddonResourceName(addon string) string {
+	return fmt.Sprintf("yke-%s-addon", addon)
+}
+
 func (c *Cluster) deployK8sAddOns(ctx context.Context) error {
-	if err := c.deployKubeDNS(ctx); err != nil {
+	if err := c.deployDNS(ctx); err != nil {
 		if err, ok := err.(*addonError); ok && err.isCritical {
 			return err
 		}
-		log.Warningf("Failed to deploy addon execute job [%s]: %v", KubeDNSAddonResourceName, err)
+		log.Warningf("Failed to deploy DNS addon execute job for provider %s: %v", c.DNS.Provider, err)
 	}
 	if c.Monitoring.Provider == DefaultMonitoringProvider {
 		if err := c.deployMetricServer(ctx); err != nil {
@@ -230,24 +259,53 @@ func (c *Cluster) deployKubeDNS(ctx context.Context) error {
 		log.Infof("[KubeDNS] disable-kube-dns is specified, skipping deploy it")
 		return nil
 	}
-	log.Infof("[addons] Setting up KubeDNS")
-	kubeDNSConfig := map[string]string{
-		addons.KubeDNSServer:          c.ClusterDNSServer,
-		addons.KubeDNSClusterDomain:   c.ClusterDomain,
-		addons.KubeDNSImage:           c.SystemImages.KubeDNS,
-		addons.DNSMasqImage:           c.SystemImages.DNSmasq,
-		addons.KubeDNSSidecarImage:    c.SystemImages.KubeDNSSidecar,
-		addons.KubeDNSAutoScalerImage: c.SystemImages.KubeDNSAutoscaler,
-		addons.RBAC:                   c.Authorization.Mode,
+	log.Infof("[addons] Setting up %s", c.DNS.Provider)
+	kubeDNSConfig := KubeDNSOptions{
+		KubeDNSImage:           c.SystemImages.KubeDNS,
+		KubeDNSSidecarImage:    c.SystemImages.KubeDNSSidecar,
+		KubeDNSAutoScalerImage: c.SystemImages.KubeDNSAutoscaler,
+		DNSMasqImage:           c.SystemImages.DNSmasq,
+		RBACConfig:             c.Authorization.Mode,
+		ClusterDomain:          c.ClusterDomain,
+		ClusterDNSServer:       c.ClusterDNSServer,
+		UpstreamNameservers:    c.DNS.UpstreamNameservers,
+		ReverseCIDRs:           c.DNS.ReverseCIDRs,
 	}
 	kubeDNSYaml, err := addons.GetKubeDNSManifest(kubeDNSConfig)
 	if err != nil {
 		return err
 	}
-	if err := c.doAddonDeployAsync(ctx, kubeDNSYaml, KubeDNSAddonResourceName, false); err != nil {
+	if err := c.doAddonDeployAsync(ctx, kubeDNSYaml, getAddonResourceName(c.DNS.Provider), false); err != nil {
 		return err
 	}
 	log.Infof("[addons] KubeDNS deployed successfully..")
+	return nil
+}
+
+func (c *Cluster) deployCoreDNS(ctx context.Context) error {
+	if disableDns := ctx.Value("disable-kube-dns"); disableDns != nil && disableDns.(bool) {
+		log.Infof("[CoreDNS] disable-kube-dns is specified, skipping deploy it")
+		return nil
+	}
+	log.Infof("[addons] Setting up %s", c.DNS.Provider)
+	CoreDNSConfig := CoreDNSOptions{
+		CoreDNSImage: c.SystemImages.CoreDNS,
+		//CoreDNSAutoScalerImage: c.SystemImages.CoreDNSAutoscaler,
+		CoreDNSAutoScalerImage: c.SystemImages.KubeDNSAutoscaler,
+		RBACConfig:             c.Authorization.Mode,
+		ClusterDomain:          c.ClusterDomain,
+		ClusterDNSServer:       c.ClusterDNSServer,
+		UpstreamNameservers:    c.DNS.UpstreamNameservers,
+		ReverseCIDRs:           c.DNS.ReverseCIDRs,
+	}
+	coreDNSYaml, err := addons.GetCoreDNSManifest(CoreDNSConfig)
+	if err != nil {
+		return err
+	}
+	if err := c.doAddonDeployAsync(ctx, coreDNSYaml, getAddonResourceName(c.DNS.Provider), false); err != nil {
+		return err
+	}
+	log.Infof("[addons] CoreDNS deployed successfully..")
 	return nil
 }
 
@@ -512,4 +570,70 @@ func (c *Cluster) deployYunionCloudMon(ctx context.Context) error {
 	}
 	log.Infof("[addons] Yunion cloud monitor deployed successfully...")
 	return nil
+}
+
+func (c *Cluster) removeDNSProvider(ctx context.Context, dnsprovider string) error {
+	AddonJobExists, err := addons.AddonJobExists(getAddonResourceName(dnsprovider)+"-deploy-job", c.LocalKubeConfigPath, c.K8sWrapTransport)
+	if err != nil {
+		return err
+	}
+	if AddonJobExists {
+		log.Infof("[dns] removing DNS provider %s", dnsprovider)
+		if err := c.doAddonDelete(ctx, getAddonResourceName(dnsprovider), false); err != nil {
+			return err
+		}
+		log.Infof("[dns] DNS provider %s removed successfully", dnsprovider)
+		return nil
+	}
+	return nil
+}
+
+func (c *Cluster) deployDNS(ctx context.Context) error {
+	switch DNSProvider := c.DNS.Provider; DNSProvider {
+	case "kubedns":
+		for _, dnsprovider := range DNSProviders {
+			if strings.EqualFold(dnsprovider, DefaultDNSProvider) {
+				continue
+			}
+			if err := c.removeDNSProvider(ctx, dnsprovider); err != nil {
+				return nil
+			}
+		}
+		if err := c.deployKubeDNS(ctx); err != nil {
+			if err, ok := err.(*addonError); ok && err.isCritical {
+				return err
+			}
+			log.Warningf("Failed to deploy addon execute job [%s]: %v", getAddonResourceName(c.DNS.Provider), err)
+		}
+		log.Infof("[dns] DNS provider %s deployed successfully", c.DNS.Provider)
+		return nil
+	case "coredns":
+		for _, dnsprovider := range DNSProviders {
+			if strings.EqualFold(dnsprovider, "coredns") {
+				continue
+			}
+			if err := c.removeDNSProvider(ctx, dnsprovider); err != nil {
+				return nil
+			}
+		}
+		if err := c.deployCoreDNS(ctx); err != nil {
+			if err, ok := err.(*addonError); ok && err.isCritical {
+				return err
+			}
+			log.Warningf("Failed to deploy addon execute job [%s]: %v", getAddonResourceName(c.DNS.Provider), err)
+		}
+		log.Infof("[dns] DNS provider %s deployed successfully", c.DNS.Provider)
+		return nil
+	case "none":
+		// Check all DNS providers and remove if present
+		for _, dnsprovider := range DNSProviders {
+			if err := c.removeDNSProvider(ctx, dnsprovider); err != nil {
+				return nil
+			}
+		}
+		return nil
+	default:
+		log.Warningf("[dns] No valid DNS provider configured: %s", c.DNS.Provider)
+		return nil
+	}
 }
