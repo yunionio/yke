@@ -29,6 +29,8 @@ type KubernetesEngineConfig struct {
 	PrivateRegistries []PrivateRegistry `yaml:"private_registries" json:"privateRegistries"`
 	// Ingress controller used in the cluster
 	Ingress IngressConfig `yaml:"ingress" json:"ingress"`
+	// DNS Service
+	DNS DNSConfig `yaml:"dns" json:"dns"`
 	// Cluster Name used in the kube config
 	ClusterName string `yaml:"cluster_name" json:"clusterName"`
 	// Cloud Provider options
@@ -92,6 +94,9 @@ type SystemImages struct {
 	KubeDNSSidecar string `yaml:"kubedns_sidecar" json:"kubednsSidecar"`
 	// KubeDNS autoscaler image
 	KubeDNSAutoscaler string `yaml:"kubedns_autoscaler" json:"kubednsAutoscaler"`
+	// CoreDNS image
+	CoreDNS string `yaml:"coredns" json:"coredns"`
+	// CoreDNSAutoscaler string `yaml:"coredns_autoscaler" json:"corednsAutoscaler"`
 	// Kubernetes image
 	Kubernetes string `yaml:"kubernetes" json:"kubernetes"`
 	// Yunion CNI image
@@ -299,6 +304,12 @@ type IngressConfig struct {
 	NodeSelector map[string]string `yaml:"node_selector" json:"nodeSelector"`
 	// Ingress controller extra arguments
 	ExtraArgs map[string]string
+}
+
+type DNSConfig struct {
+	Provider            string   `yaml:"provider" json:"provider"`
+	UpstreamNameservers []string `yaml:"upstream_nameservers" json:"upstream_nameservers"`
+	ReverseCIDRs        []string `yaml:"reverse_cidrs" json:"reverseCIDRs"`
 }
 
 type Plan struct {
