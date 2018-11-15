@@ -33,6 +33,7 @@ const (
 	DefaultEtcdBackupCreationPeriod  = "5m0s"
 	DefaultEtcdBackupRetentionPeriod = "24h"
 	DefaultMonitoringProvider        = "metrics-server"
+	DefaultDNSProvider               = "coredns"
 
 	DefaultEtcdHeartbeatIntervalName  = "heartbeat-interval"
 	DefaultEtcdHeartbeatIntervalValue = "500"
@@ -112,6 +113,9 @@ func (c *Cluster) setClusterDefaults(ctx context.Context) {
 	if len(c.Monitoring.Provider) == 0 {
 		c.Monitoring.Provider = DefaultMonitoringProvider
 	}
+	if len(c.DNS.Provider) == 0 {
+		c.DNS.Provider = DefaultDNSProvider
+	}
 
 	c.setClusterImageDefaults()
 	c.setClusterServicesDefaults()
@@ -169,13 +173,15 @@ func (c *Cluster) setClusterImageDefaults() {
 	}
 
 	systemImagesDefaultsMap := map[*string]string{
-		&c.SystemImages.Alpine:                    d(imageDefaults.Alpine, privRegURL),
-		&c.SystemImages.NginxProxy:                d(imageDefaults.NginxProxy, privRegURL),
-		&c.SystemImages.CertDownloader:            d(imageDefaults.CertDownloader, privRegURL),
-		&c.SystemImages.KubeDNS:                   d(imageDefaults.KubeDNS, privRegURL),
-		&c.SystemImages.KubeDNSSidecar:            d(imageDefaults.KubeDNSSidecar, privRegURL),
-		&c.SystemImages.DNSmasq:                   d(imageDefaults.DNSmasq, privRegURL),
-		&c.SystemImages.KubeDNSAutoscaler:         d(imageDefaults.KubeDNSAutoscaler, privRegURL),
+		&c.SystemImages.Alpine:            d(imageDefaults.Alpine, privRegURL),
+		&c.SystemImages.NginxProxy:        d(imageDefaults.NginxProxy, privRegURL),
+		&c.SystemImages.CertDownloader:    d(imageDefaults.CertDownloader, privRegURL),
+		&c.SystemImages.KubeDNS:           d(imageDefaults.KubeDNS, privRegURL),
+		&c.SystemImages.KubeDNSSidecar:    d(imageDefaults.KubeDNSSidecar, privRegURL),
+		&c.SystemImages.DNSmasq:           d(imageDefaults.DNSmasq, privRegURL),
+		&c.SystemImages.KubeDNSAutoscaler: d(imageDefaults.KubeDNSAutoscaler, privRegURL),
+		&c.SystemImages.CoreDNS:           d(imageDefaults.CoreDNS, privRegURL),
+		//&c.SystemImages.CoreDNSAutoscaler:         d(imageDefaults.CoreDNSAutoscaler, privRegURL),
 		&c.SystemImages.KubernetesServicesSidecar: d(imageDefaults.KubernetesServicesSidecar, privRegURL),
 		&c.SystemImages.Etcd:                      d(imageDefaults.Etcd, privRegURL),
 		&c.SystemImages.Kubernetes:                d(imageDefaults.Kubernetes, privRegURL),
