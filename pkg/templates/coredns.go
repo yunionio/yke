@@ -97,6 +97,7 @@ spec:
     metadata:
       labels:
         k8s-app: kube-dns
+        lxcfs: "false"
     spec:
 {{- if eq .RBACConfig "rbac"}}
       serviceAccountName: coredns
