@@ -278,6 +278,7 @@ spec:
     spec:
       serviceAccount: csi-nodeplugin
       hostNetwork: true
+      hostPID: true
       # to use e.g. Rook orchestrated cluster, and mons' FQDN is
       # resolved through k8s service, set dns policy to cluster first
       dnsPolicy: ClusterFirstWithHostNet
