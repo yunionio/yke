@@ -278,7 +278,6 @@ spec:
     spec:
       serviceAccount: csi-nodeplugin
       hostNetwork: true
-      hostPID: true
       # to use e.g. Rook orchestrated cluster, and mons' FQDN is
       # resolved through k8s service, set dns policy to cluster first
       dnsPolicy: ClusterFirstWithHostNet
@@ -336,7 +335,7 @@ spec:
             - name: plugin-dir
               mountPath: /var/lib/kubelet/plugins/csi-yunionplugin
             - name: pods-mount-dir
-              mountPath: /var/lib/kubelet/pods
+              mountPath: /var/run
               mountPropagation: "Bidirectional"
             - mountPath: /dev
               name: host-dev
@@ -360,7 +359,7 @@ spec:
             type: Directory
         - name: pods-mount-dir
           hostPath:
-            path: /var/lib/kubelet/pods
+            path: /var/run
             type: Directory
         - name: socket-dir
           hostPath:
