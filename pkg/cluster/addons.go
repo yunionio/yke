@@ -492,7 +492,7 @@ func (c *Cluster) deployIngress(ctx context.Context) error {
 }
 
 func (c *Cluster) deployYunionCSI(ctx context.Context) error {
-	log.Infof("[addons] Setting up Yunion CSI plugin")
+	log.Infof("[csi] Setting up Yunion CSI plugin")
 	// TODO: make yunion auth info options to global options
 	csiConfig := YunionCSIOptions{
 		YunionAuthURL:      c.YunionConfig.AuthURL,
@@ -509,10 +509,21 @@ func (c *Cluster) deployYunionCSI(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	jobExists, err := addons.AddonJobExists(YunionCSIAddonResourceName, c.LocalKubeConfigPath, c.K8sWrapTransport)
+	if err != nil {
+		return err
+	}
+	if jobExists {
+		log.Infof("[csi] removing old csi provider %s", YunionCSIAddonResourceName)
+		if err := c.doAddonDelete(ctx, YunionCSIAddonResourceName, false); err != nil {
+			return err
+		}
+		log.Infof("[csi] %s removed successfully", YunionCSIAddonResourceName)
+	}
 	if err := c.doAddonDeployAsync(ctx, csiYaml, YunionCSIAddonResourceName, false); err != nil {
 		return err
 	}
-	log.Infof("[addons] YunionCSI deployed successfully...")
+	log.Infof("[csi] YunionCSI deployed successfully...")
 	return nil
 }
 
