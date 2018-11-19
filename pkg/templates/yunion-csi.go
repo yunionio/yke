@@ -339,8 +339,6 @@ spec:
               mountPropagation: "Bidirectional"
             - mountPath: /dev
               name: host-dev
-            - mountPath: /host
-              name: host-rootfs
             - mountPath: /sys
               name: host-sys
             - mountPath: /lib/modules
@@ -368,9 +366,6 @@ spec:
         - name: host-dev
           hostPath:
             path: /dev
-        - name: host-rootfs
-          hostPath:
-            path: /
         - name: host-sys
           hostPath:
             path: /sys
