@@ -96,6 +96,7 @@ spec:
         # and CNI network config file on each node.
         - name: install-cni
           image: {{.CNIImage}}
+          imagePullPolicy: "Always"
           command: ["/install-cni.sh"]
           env:
           # The CNI network config to install on each node.
