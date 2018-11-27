@@ -12,7 +12,12 @@ const SchedulerPolicyConfigTemplate = `
 			"bindVerb": "",
 			"prioritizeVerb": "",
 			"weight": 1,
+			{{- if .EnableHTTPS }}
+			"enableHttps": true,
+			"tlsConfig": {"insecure": true},
+			{{- else }}
 			"enableHttps": false,
+			{{- end }}
 			"nodeCacheCapable": false,
 			"httpTimeout": 10000000000
 		}
