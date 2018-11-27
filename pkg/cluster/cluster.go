@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 
 	"golang.org/x/sync/errgroup"
@@ -422,7 +423,18 @@ func (c *Cluster) parseSchedulerConfig(ctx context.Context) error {
 	if c.YunionConfig.SchedulerUrl == "" {
 		return nil
 	}
-	config, err := templates.CompileTemplateFromMap(templates.SchedulerPolicyConfigTemplate, map[string]string{"SchedulerUrl": c.YunionConfig.SchedulerUrl})
+	ret, err := url.Parse(c.YunionConfig.SchedulerUrl)
+	if err != nil {
+		return err
+	}
+	enableHTTPS := false
+	if ret.Scheme == "https" {
+		enableHTTPS = true
+	}
+	config, err := templates.CompileTemplateFromMap(templates.SchedulerPolicyConfigTemplate, map[string]interface{}{
+		"SchedulerUrl": c.YunionConfig.SchedulerUrl,
+		"EnableHTTPS":  enableHTTPS,
+	})
 	if err != nil {
 		return fmt.Errorf("Generate scheduler policy config error: %v", err)
 	}
