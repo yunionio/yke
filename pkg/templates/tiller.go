@@ -40,7 +40,6 @@ spec:
         lxcfs: "false"
     spec:
       automountServiceAccountToken: true
-      hostNetwork: true
       containers:
       - env:
         - name: TILLER_NAMESPACE
