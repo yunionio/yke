@@ -404,7 +404,7 @@ func (c *Cluster) BuildKubeletProcess(host *hosts.Host, prefixPath string) types
 		"/var/log/pods:/var/log/pods:z",
 		"/usr:/host/usr:ro",
 		"/etc:/host/etc:ro",
-		"/opt/cloud/workspace/servers/hostinfo:/opt/cloud/workspace/servers/hostinfo:ro",
+		"/opt/cloud/workspace:/opt/cloud/workspace:shared,z",
 		"/lib/modules:/lib/modules:z",
 	}
 	// Special case to simplify using flex volumes
