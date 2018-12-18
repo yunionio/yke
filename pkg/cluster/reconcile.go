@@ -48,6 +48,12 @@ func ReconcileCluster(ctx context.Context, kubeCluster, currentCluster *Cluster,
 	if err := reconcileControl(ctx, currentCluster, kubeCluster, kubeClient); err != nil {
 		return err
 	}
+	// Handle service account token key issue
+	kubeAPICert := currentCluster.Certificates[pki.KubeAPICertName]
+	if currentCluster.Certificates[pki.ServiceAccountTokenKeyName].Key == nil {
+		log.Infof("[certificates] Creating service account token key")
+		currentCluster.Certificates[pki.ServiceAccountTokenKeyName] = pki.ToCertObject(pki.ServiceAccountTokenKeyName, pki.ServiceAccountTokenKeyName, "", kubeAPICert.Certificate, kubeAPICert.Key)
+	}
 	log.Infof("[reconcile] Reconciled cluster state successfully")
 	return nil
 }
@@ -211,7 +217,8 @@ func reconcileEtcd(ctx context.Context, currentCluster, kubeCluster *Cluster, ku
 		for _, etcdReadyHost := range kubeCluster.EtcdReadyHosts {
 			etcdNodePlanMap[etcdReadyHost.Address] = BuildKEConfigNodePlan(ctx, kubeCluster, etcdReadyHost, etcdReadyHost.DockerInfo)
 		}
-
+		// this will start the newly added etcd node and make sure it started correctly before restarting other node
+		// https://github.com/etcd-io/etcd/blob/master/Documentation/op-guide/runtime-configuration.md#add-a-new-member
 		if err := services.ReloadEtcdCluster(ctx, kubeCluster.EtcdReadyHosts, etcdHost, currentCluster.LocalConnDialerFactory, clientCert, clientkey, currentCluster.PrivateRegistriesMap, etcdNodePlanMap, kubeCluster.SystemImages.Alpine); err != nil {
 			return err
 		}

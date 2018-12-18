@@ -28,9 +28,13 @@ const (
 	IngressAddonJobName            = "yke-ingress-controller-deploy-job"
 	IngressAddonDeleteJobName      = "yke-ingress-controller-delete-job"
 	MetricsServerAddonResourceName = "yke-metrics-addon"
-	TillerAddonResourceName        = "yke-tiller-addon"
-	HeapsterAddonResourceName      = "yke-heapster-addon"
-	YunionCloudMonResourceName     = "yke-yunion-cloudmon-addon"
+	NginxIngressAddonAppName       = "ingress-nginx"
+	KubeDNSAddonAppName            = "kube-dns"
+	KubeDNSAutoscalerAppName       = "kube-dns-autoscaler"
+
+	TillerAddonResourceName    = "yke-tiller-addon"
+	HeapsterAddonResourceName  = "yke-heapster-addon"
+	YunionCloudMonResourceName = "yke-yunion-cloudmon-addon"
 )
 
 var DNSProviders = []string{"kubedns", "coredns"}
@@ -179,7 +183,7 @@ func (c *Cluster) deployAddonsInclude(ctx context.Context) error {
 	log.Infof("[addons] Checking for included user addons")
 
 	if len(c.AddonsInclude) == 0 {
-		log.Infof("[addons] No included addon paths or urls..")
+		log.Infof("[addons] No included addon paths or urls")
 		return nil
 	}
 	for _, addon := range c.AddonsInclude {
@@ -278,7 +282,7 @@ func (c *Cluster) deployKubeDNS(ctx context.Context) error {
 	if err := c.doAddonDeployAsync(ctx, kubeDNSYaml, getAddonResourceName(c.DNS.Provider), false); err != nil {
 		return err
 	}
-	log.Infof("[addons] KubeDNS deployed successfully..")
+	log.Infof("[addons] KubeDNS deployed successfully")
 	return nil
 }
 
@@ -355,7 +359,7 @@ func (c *Cluster) doAddonDeploy(ctx context.Context, addonYaml, resourceName str
 		return &addonError{fmt.Errorf("Failed to save addon ConfigMap: %v", err), isCritical}
 	}
 
-	log.Infof("[addons] Executing deploy job [%s] ...", resourceName)
+	log.Infof("[addons] Executing deploy job [%s]", resourceName)
 	k8sClient, err := k8s.NewClient(c.LocalKubeConfigPath, c.K8sWrapTransport)
 	if err != nil {
 		return &addonError{err, isCritical}

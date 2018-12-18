@@ -29,7 +29,7 @@ import (
 const (
 	DockerRegistryURL = "docker.io"
 	// RestartTimeout in seconds
-	RestartTimeout = 30
+	RestartTimeout = 15
 	// StopTimeout in seconds
 	StopTimeout = 30
 )
@@ -249,11 +249,40 @@ func RemoveContainer(ctx context.Context, dClient *client.Client, hostname, cont
 	return nil
 }
 
+func RestartContainer(ctx context.Context, dClient *client.Client, hostname, containerName string) error {
+	restartTimeout := RestartTimeout * time.Second
+	err := dClient.ContainerRestart(ctx, containerName, &restartTimeout)
+	if err != nil {
+		return fmt.Errorf("Can't restart Docker container [%s] for host [%s]: %v", containerName, hostname, err)
+	}
+	return nil
+}
+
 func StopContainer(ctx context.Context, dClient *client.Client, hostname, containerName string) error {
 	err := dClient.ContainerStop(ctx, containerName, nil)
 	if err != nil {
 		return fmt.Errorf("Can't stop Docker container [%s] for host [%s]: %v", containerName, hostname, err)
 	}
+	return nil
+}
+
+func DoRestartContainer(ctx context.Context, dClient *client.Client, containerName, hostname string) error {
+	log.Debugf("[restart/%s] Checking if container is running on host [%s]", containerName, hostname)
+	// not using the wrapper to check if the error is a NotFound error
+	_, err := dClient.ContainerInspect(ctx, containerName)
+	if err != nil {
+		if client.IsErrNotFound(err) {
+			log.Debugf("[restart/%s] Container doesn't exist on host [%s]", containerName, hostname)
+			return nil
+		}
+		return err
+	}
+	log.Debugf("[restart/%s] Restarting container on host [%s]", containerName, hostname)
+	err = RestartContainer(ctx, dClient, hostname, containerName)
+	if err != nil {
+		return err
+	}
+	log.Infof("[restart/%s] Successfully restarted container on host [%s]", containerName, hostname)
 	return nil
 }
 

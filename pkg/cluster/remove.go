@@ -3,10 +3,13 @@ package cluster
 import (
 	"context"
 
+	"golang.org/x/sync/errgroup"
+
 	"yunion.io/x/yke/pkg/hosts"
 	"yunion.io/x/yke/pkg/pki"
 	"yunion.io/x/yke/pkg/services"
 	"yunion.io/x/yke/pkg/types"
+	"yunion.io/x/yke/pkg/util"
 )
 
 func (c *Cluster) ClusterRemove(ctx context.Context) error {
@@ -25,8 +28,10 @@ func (c *Cluster) ClusterRemove(ctx context.Context) error {
 	}
 
 	// Remove Etcd Plane
-	if err := services.RemoveEtcdPlane(ctx, c.EtcdHosts, true); err != nil {
-		return err
+	if !externalEtcd {
+		if err := services.RemoveEtcdPlane(ctx, c.EtcdHosts, true); err != nil {
+			return err
+		}
 	}
 
 	// Clean up all hosts
@@ -39,15 +44,21 @@ func (c *Cluster) ClusterRemove(ctx context.Context) error {
 }
 
 func cleanUpHosts(ctx context.Context, cpHosts, workerHosts, etcdHosts []*hosts.Host, cleanerImage string, prsMap map[string]types.PrivateRegistry, externalEtcd bool) error {
-	allHosts := []*hosts.Host{}
-	allHosts = append(allHosts, cpHosts...)
-	allHosts = append(allHosts, workerHosts...)
-	allHosts = append(allHosts, etcdHosts...)
+	uniqueHosts := hosts.GetUniqueHostList(cpHosts, workerHosts, etcdHosts)
 
-	for _, host := range allHosts {
-		if err := host.CleanUpAll(ctx, cleanerImage, prsMap, externalEtcd); err != nil {
-			return err
-		}
+	var errgrp errgroup.Group
+	hostsQueue := util.GetObjectQueue(uniqueHosts)
+	for w := 0; w < WorkerThreads; w++ {
+		errgrp.Go(func() error {
+			var errList []error
+			for host := range hostsQueue {
+				runHost := host.(*hosts.Host)
+				if err := runHost.CleanUpAll(ctx, cleanerImage, prsMap, externalEtcd); err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
+		})
 	}
-	return nil
+	return errgrp.Wait()
 }

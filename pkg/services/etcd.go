@@ -10,6 +10,7 @@ import (
 	etcdclient "github.com/coreos/etcd/client"
 	"github.com/docker/docker/api/types/container"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 
 	"yunion.io/x/log"
 
@@ -17,13 +18,14 @@ import (
 	"yunion.io/x/yke/pkg/hosts"
 	"yunion.io/x/yke/pkg/pki"
 	"yunion.io/x/yke/pkg/types"
+	"yunion.io/x/yke/pkg/util"
 )
 
 const (
 	EtcdSnapshotPath = "/opt/yke/etcd-snapshots/"
 	EtcdRestorePath  = "/opt/yke/etcd-snapshots-restore/"
 	EtcdDataDir      = "/var/lib/yunion/etcd/"
-	EtcdInitWaitTime = 5
+	EtcdInitWaitTime = 10
 )
 
 type EtcdSnapshot struct {
@@ -71,29 +73,63 @@ func RunEtcdPlane(
 	return nil
 }
 
+func RestartEtcdPlane(ctx context.Context, etcdHosts []*hosts.Host) error {
+	log.Infof("[%s] Restarting up etcd plane..", ETCDRole)
+	var errgrp errgroup.Group
+
+	hostsQueue := util.GetObjectQueue(etcdHosts)
+	for w := 0; w < WorkerThreads; w++ {
+		errgrp.Go(func() error {
+			var errList []error
+			for host := range hostsQueue {
+				runHost := host.(*hosts.Host)
+				if err := docker.DoRestartContainer(ctx, runHost.DClient, EtcdContainerName, runHost.Address); err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
+		})
+	}
+	if err := errgrp.Wait(); err != nil {
+		return err
+	}
+	log.Infof("[%s] Successfully restarted etcd plane..", ETCDRole)
+	return nil
+}
+
 func RemoveEtcdPlane(ctx context.Context, etcdHosts []*hosts.Host, force bool) error {
 	log.Infof("[%s] Tearing down etcd plane..", ETCDRole)
-	for _, host := range etcdHosts {
-		err := docker.DoRemoveContainer(ctx, host.DClient, EtcdContainerName, host.Address)
-		if err != nil {
-			return err
-		}
-		if !host.IsWorker || !host.IsControl || force {
-			// remove unschedulable kubelet on etcd host
-			if err := removeKubelet(ctx, host); err != nil {
-				return err
+	var errgrp errgroup.Group
+	hostsQueue := util.GetObjectQueue(etcdHosts)
+	for w := 0; w < WorkerThreads; w++ {
+		errgrp.Go(func() error {
+			var errList []error
+			for host := range hostsQueue {
+				runHost := host.(*hosts.Host)
+				if err := docker.DoRemoveContainer(ctx, runHost.DClient, EtcdContainerName, runHost.Address); err != nil {
+					errList = append(errList, err)
+				}
+				if !runHost.IsWorker || !runHost.IsControl || force {
+					// remove unschedulable kubelet on etcd host
+					if err := removeKubelet(ctx, runHost); err != nil {
+						errList = append(errList, err)
+					}
+					if err := removeKubeproxy(ctx, runHost); err != nil {
+						errList = append(errList, err)
+					}
+					if err := removeNginxProxy(ctx, runHost); err != nil {
+						errList = append(errList, err)
+					}
+					if err := removeSidekick(ctx, runHost); err != nil {
+						errList = append(errList, err)
+					}
+				}
 			}
-			if err := removeKubeproxy(ctx, host); err != nil {
-				return err
-			}
-			if err := removeNginxProxy(ctx, host); err != nil {
-				return err
-			}
-			if err := removeSidekick(ctx, host); err != nil {
-				return err
-			}
-		}
-
+			return util.ErrList(errList)
+		})
+	}
+	if err := errgrp.Wait(); err != nil {
+		return err
 	}
 	log.Infof("[%s] Successfully tore down etcd plane..", ETCDRole)
 	return nil
@@ -164,21 +200,6 @@ func RemoveEtcdMember(ctx context.Context, etcdHost *hosts.Host, etcdHosts []*ho
 }
 
 func ReloadEtcdCluster(ctx context.Context, readyEtcdHosts []*hosts.Host, newHost *hosts.Host, localConnDialerFactory hosts.DialerFactory, cert, key []byte, prsMap map[string]types.PrivateRegistry, etcdNodePlanMap map[string]types.ConfigNodePlan, alpineImage string) error {
-	// update the old nodes
-	for _, etcdHost := range readyEtcdHosts {
-		if etcdHost.Address == newHost.Address {
-			continue
-		}
-		imageCfg, hostCfg, _ := GetProcessConfig(etcdNodePlanMap[etcdHost.Address].Processes[EtcdContainerName])
-		if err := docker.DoRunContainer(ctx, etcdHost.DClient, imageCfg, hostCfg, EtcdContainerName, etcdHost.Address, ETCDRole, prsMap); err != nil {
-			return err
-		}
-		if err := createLogLink(ctx, etcdHost, EtcdContainerName, ETCDRole, alpineImage, prsMap); err != nil {
-			return err
-		}
-		time.Sleep(EtcdInitWaitTime * time.Second)
-	}
-	// run the new etcd at last
 	imageCfg, hostCfg, _ := GetProcessConfig(etcdNodePlanMap[newHost.Address].Processes[EtcdContainerName])
 	if err := docker.DoRunContainer(ctx, newHost.DClient, imageCfg, hostCfg, EtcdContainerName, newHost.Address, ETCDRole, prsMap); err != nil {
 		return err
@@ -186,7 +207,7 @@ func ReloadEtcdCluster(ctx context.Context, readyEtcdHosts []*hosts.Host, newHos
 	if err := createLogLink(ctx, newHost, EtcdContainerName, ETCDRole, alpineImage, prsMap); err != nil {
 		return err
 	}
-	time.Sleep(10 * time.Second)
+	time.Sleep(EtcdInitWaitTime * time.Second)
 	var healthy bool
 	for _, host := range readyEtcdHosts {
 		_, _, healthCheckURL := GetProcessConfig(etcdNodePlanMap[host.Address].Processes[EtcdContainerName])

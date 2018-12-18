@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
-	"k8s.io/client-go/util/cert"
 
 	"yunion.io/x/log"
 
@@ -42,134 +41,18 @@ const (
 	BundleCertContainer = "yke-bundle-cert"
 )
 
+type GenFunc func(context.Context, map[string]CertificatePKI, types.KubernetesEngineConfig, string, string) error
+
 func GenerateKECerts(ctx context.Context, config types.KubernetesEngineConfig, configPath, configDir string) (map[string]CertificatePKI, error) {
 	certs := make(map[string]CertificatePKI)
 	// generate CA certificate and key
-	log.Infof("[certificates] Generating CA kubernetes certificates")
-	caCrt, caKey, err := GenerateCACertAndKey(CACertName)
-	if err != nil {
-		return nil, err
+	if err := GenerateKECACerts(ctx, certs, configPath, configDir); err != nil {
+		return certs, err
 	}
-	certs[CACertName] = ToCertObject(CACertName, "", "", caCrt, caKey)
-
-	// generate API certificate and key
-	log.Infof("[certificates] Generating Kubernetes API server certificates")
-	kubernetesServiceIP, err := GetKubernetesServiceIP(config.Services.KubeAPI.ServiceClusterIPRange)
-	clusterDomain := config.Services.Kubelet.ClusterDomain
-	cpHosts := hosts.NodesToHosts(config.Nodes, controlRole)
-	etcdHosts := hosts.NodesToHosts(config.Nodes, etcdRole)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get Kubernetes Service IP: %v", err)
+	// Generating certificates for kubernetes components
+	if err := GenerateKEServicesCerts(ctx, certs, config, configPath, configDir); err != nil {
+		return certs, err
 	}
-	kubeAPIAltNames := GetAltNames(cpHosts, clusterDomain, kubernetesServiceIP, config.Authentication.SANs)
-	kubeAPICrt, kubeAPIKey, err := GenerateSignedCertAndKey(caCrt, caKey, true, KubeAPICertName, kubeAPIAltNames, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	certs[KubeAPICertName] = ToCertObject(KubeAPICertName, "", "", kubeAPICrt, kubeAPIKey)
-
-	// generate Kube controller-manager certificate and key
-	log.Infof("[certificates] Generating Kube Controller certificates")
-	kubeControllerCrt, kubeControllerKey, err := GenerateSignedCertAndKey(caCrt, caKey, false, getDefaultCN(KubeControllerCertName), nil, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	certs[KubeControllerCertName] = ToCertObject(KubeControllerCertName, "", "", kubeControllerCrt, kubeControllerKey)
-
-	// generate Kube scheduler certificate and key
-	log.Infof("[certificates] Generating Kube Scheduler certificates")
-	kubeSchedulerCrt, kubeSchedulerKey, err := GenerateSignedCertAndKey(caCrt, caKey, false, getDefaultCN(KubeSchedulerCertName), nil, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	certs[KubeSchedulerCertName] = ToCertObject(KubeSchedulerCertName, "", "", kubeSchedulerCrt, kubeSchedulerKey)
-
-	// generate Kube Proxy certificate and key
-	log.Infof("[certificates] Generating Kube Proxy certificates")
-	kubeProxyCrt, kubeProxyKey, err := GenerateSignedCertAndKey(caCrt, caKey, false, getDefaultCN(KubeProxyCertName), nil, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	certs[KubeProxyCertName] = ToCertObject(KubeProxyCertName, "", "", kubeProxyCrt, kubeProxyKey)
-
-	// generate Kubelet certificate and key
-	log.Infof("[certificates] Generating Node certificate")
-	nodeCrt, nodeKey, err := GenerateSignedCertAndKey(caCrt, caKey, false, KubeNodeCommonName, nil, nil, []string{KubeNodeOrganizationName})
-	if err != nil {
-		return nil, err
-	}
-	certs[KubeNodeCertName] = ToCertObject(KubeNodeCertName, KubeNodeCommonName, KubeNodeOrganizationName, nodeCrt, nodeKey)
-
-	// generate Admin certificate and key
-	log.Infof("[certificates] Generating admin certificates and kubeconfig")
-	if len(configPath) == 0 {
-		configPath = ClusterConfig
-	}
-	localKubeConfigPath := GetLocalKubeConfig(configPath, configDir)
-	kubeAdminCrt, kubeAdminKey, err := GenerateSignedCertAndKey(caCrt, caKey, false, KubeAdminCertName, nil, nil, []string{KubeAdminOrganizationName})
-	if err != nil {
-		return nil, err
-	}
-	kubeAdminCertObj := ToCertObject(KubeAdminCertName, KubeAdminCertName, KubeAdminOrganizationName, kubeAdminCrt, kubeAdminKey)
-	if len(cpHosts) > 0 {
-		kubeAdminConfig := GetKubeConfigX509WithData(
-			"https://"+cpHosts[0].Address+":6443",
-			config.ClusterName,
-			KubeAdminCertName,
-			string(cert.EncodeCertPEM(caCrt)),
-			string(cert.EncodeCertPEM(kubeAdminCrt)),
-			string(cert.EncodePrivateKeyPEM(kubeAdminKey)))
-		kubeAdminCertObj.Config = kubeAdminConfig
-		kubeAdminCertObj.ConfigPath = localKubeConfigPath
-	} else {
-		kubeAdminCertObj.Config = ""
-	}
-	certs[KubeAdminCertName] = kubeAdminCertObj
-	// generate etcd certificate and key
-	if len(config.Services.Etcd.ExternalURLs) > 0 {
-		clientCert, err := cert.ParseCertsPEM([]byte(config.Services.Etcd.Cert))
-		if err != nil {
-			return nil, err
-		}
-		clientKey, err := cert.ParsePrivateKeyPEM([]byte(config.Services.Etcd.Key))
-		if err != nil {
-			return nil, err
-		}
-		certs[EtcdClientCertName] = ToCertObject(EtcdClientCertName, "", "", clientCert[0], clientKey.(*rsa.PrivateKey))
-
-		caCert, err := cert.ParseCertsPEM([]byte(config.Services.Etcd.CACert))
-		if err != nil {
-			return nil, err
-		}
-		certs[EtcdClientCACertName] = ToCertObject(EtcdClientCACertName, "", "", caCert[0], nil)
-	}
-	etcdAltNames := GetAltNames(etcdHosts, clusterDomain, kubernetesServiceIP, []string{})
-	for _, host := range etcdHosts {
-		log.Infof("[certificates] Generating etcd-%s certificate and key", host.InternalAddress)
-		etcdCrt, etcdKey, err := GenerateSignedCertAndKey(caCrt, caKey, true, EtcdCertName, etcdAltNames, nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		etcdName := GetEtcdCrtName(host.InternalAddress)
-		certs[etcdName] = ToCertObject(etcdName, "", "", etcdCrt, etcdKey)
-	}
-
-	// generate request header client CA certificate and key
-	log.Infof("[certificates] Generating Kubernetes API server aggregation layer requestheader client CA certificates")
-	requestHeaderCACrt, requestHeaderCAKey, err := GenerateCACertAndKey(RequestHeaderCACertName)
-	if err != nil {
-		return nil, err
-	}
-	certs[RequestHeaderCACertName] = ToCertObject(RequestHeaderCACertName, "", "", requestHeaderCACrt, requestHeaderCAKey)
-
-	// generate API server proxy client key and certs
-	log.Infof("[certificates] Generating Kubernetes API server proxy client certificates")
-	apiserverProxyClientCrt, apiserverProxyClientKey, err := GenerateSignedCertAndKey(requestHeaderCACrt, requestHeaderCAKey, true, APIProxyClientCertName, nil, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	certs[APIProxyClientCertName] = ToCertObject(APIProxyClientCertName, "", "", apiserverProxyClientCrt, apiserverProxyClientKey)
-
 	return certs, nil
 }
 
@@ -268,11 +151,13 @@ func ExtractBackupBundleOnHost(ctx context.Context, host *hosts.Host, alpineSyst
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				"mkdir -p %s; tar xzvf %s -C %s --strip-components %d",
+				"mkdir -p %s; tar xzvf %s -C %s --strip-components %d --exclude %s",
 				TempCertPath,
 				BundleCertPath,
 				TempCertPath,
-				len(strings.Split(filepath.Clean(TempCertPath), "/"))-1),
+				len(strings.Split(filepath.Clean(TempCertPath), "/"))-1,
+				ClusterStateFile,
+			),
 		},
 		Image: alpineSystemImage,
 	}
