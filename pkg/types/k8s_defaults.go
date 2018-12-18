@@ -120,7 +120,7 @@ var (
 			KubeDNSSidecar:            m("gcr.io/google_containers/k8s-dns-sidecar-amd64:1.14.13"),
 			KubeDNSAutoscaler:         m("gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.0.0"),
 			CoreDNS:                   m("yunion/coredns:1.2.6"),
-			YunionCNI:                 m("yunion/cni:v2.3.1"),
+			YunionCNI:                 m("yunion/cni:v2.4.0"),
 			CSIAttacher:               m("quay.io/k8scsi/csi-attacher:v0.4.0"),
 			CSIProvisioner:            m("quay.io/k8scsi/csi-provisioner:v0.4.0"),
 			CSIRegistrar:              m("quay.io/k8scsi/driver-registrar:v0.4.0"),
