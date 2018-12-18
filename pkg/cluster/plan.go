@@ -131,7 +131,7 @@ func (c *Cluster) BuildKubeAPIProcess(prefixPath string) types.Process {
 		"tls-private-key-file":               pki.GetKeyPath(pki.KubeAPICertName),
 		"kubelet-client-certificate":         pki.GetCertPath(pki.KubeAPICertName),
 		"kubelet-client-key":                 pki.GetKeyPath(pki.KubeAPICertName),
-		"service-account-key-file":           pki.GetKeyPath(pki.KubeAPICertName),
+		"service-account-key-file":           pki.GetKeyPath(pki.ServiceAccountTokenKeyName),
 		"etcd-cafile":                        etcdCAClientCert,
 		"etcd-certfile":                      etcdClientCert,
 		"etcd-keyfile":                       etcdClientKey,
@@ -242,7 +242,7 @@ func (c *Cluster) BuildKubeControllerProcess(prefixPath string) types.Process {
 		//"allocate-node-cidrs":              "true",
 		//"cluster-cidr":                     c.ClusterCIDR,
 		"service-cluster-ip-range":         c.Services.KubeController.ServiceClusterIPRange,
-		"service-account-private-key-file": pki.GetKeyPath(pki.KubeAPICertName),
+		"service-account-private-key-file": pki.GetKeyPath(pki.ServiceAccountTokenKeyName),
 		"root-ca-file":                     pki.GetCertPath(pki.CACertName),
 	}
 	if len(c.CloudProvider.Name) > 0 {
@@ -758,7 +758,7 @@ func getTagMajorVersion(tag string) string {
 }
 
 func getCloudConfigChecksum(config types.CloudProvider) string {
-	configByteSum := md5.Sum([]byte(fmt.Sprintf("%s", config)))
+	configByteSum := md5.Sum([]byte(fmt.Sprintf("%v", config)))
 	return fmt.Sprintf("%x", configByteSum)
 }
 

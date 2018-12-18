@@ -18,6 +18,7 @@ import (
 	"yunion.io/x/yke/pkg/pki"
 	"yunion.io/x/yke/pkg/services"
 	"yunion.io/x/yke/pkg/types"
+	"yunion.io/x/yke/pkg/util"
 )
 
 const (
@@ -76,7 +77,8 @@ func SetUpAuthentication(ctx context.Context, kubeCluster, currentCluster *Clust
 					if err := rebuildLocalAdminConfig(ctx, kubeCluster); err != nil {
 						return err
 					}
-					kubeCluster.Certificates, err = regenerateAPICertificate(kubeCluster, kubeCluster.Certificates)
+					//kubeCluster.Certificates, err = regenerateAPICertificate(kubeCluster, kubeCluster.Certificates)
+					err = pki.GenerateKubeAPICertificate(ctx, kubeCluster.Certificates, kubeCluster.KubernetesEngineConfig, "", "")
 					if err != nil {
 						return fmt.Errorf("Failed to regenerate KubeAPI certificate %v", err)
 					}
@@ -134,6 +136,7 @@ func getClusterCerts(ctx context.Context, kubeClient *kubernetes.Clientset, etcd
 		pki.KubeAdminCertName,
 		pki.APIProxyClientCertName,
 		pki.RequestHeaderCACertName,
+		pki.ServiceAccountTokenKeyName,
 	}
 
 	for _, etcdHost := range etcdHosts {
@@ -146,14 +149,16 @@ func getClusterCerts(ctx context.Context, kubeClient *kubernetes.Clientset, etcd
 		secret, err := k8s.GetSecret(kubeClient, certName)
 		if err != nil && !strings.HasPrefix(certName, "kube-etcd") &&
 			!strings.Contains(certName, pki.RequestHeaderCACertName) &&
-			!strings.Contains(certName, pki.APIProxyClientCertName) {
+			!strings.Contains(certName, pki.APIProxyClientCertName) &&
+			!strings.Contains(certName, pki.ServiceAccountTokenKeyName) {
 			return nil, err
 		}
 		// If I can't find an etcd, requestheader, or proxy client cert, I will not fail and will create it later
 		if (secret == nil || secret.Data == nil) &&
 			(strings.HasPrefix(certName, "kube-etcd") ||
 				strings.Contains(certName, pki.RequestHeaderCACertName) ||
-				strings.Contains(certName, pki.APIProxyClientCertName)) {
+				strings.Contains(certName, pki.APIProxyClientCertName) ||
+				strings.Contains(certName, pki.ServiceAccountTokenKeyName)) {
 			certMap[certName] = pki.CertificatePKI{}
 			continue
 		}
@@ -246,10 +251,18 @@ func saveCertToKubernetes(kubeClient *kubernetes.Clientset, crtName string, crt 
 
 func deployBackupCertificates(ctx context.Context, backupHosts []*hosts.Host, kubeCluster *Cluster) error {
 	var errgrp errgroup.Group
-	for _, host := range backupHosts {
-		runHost := host
+
+	hostsQueue := util.GetObjectQueue(backupHosts)
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			return pki.DeployCertificatesOnHost(ctx, runHost, kubeCluster.Certificates, kubeCluster.SystemImages.CertDownloader, pki.TempCertPath, kubeCluster.PrivateRegistriesMap)
+			var errList []error
+			for host := range hostsQueue {
+				err := pki.DeployCertificatesOnHost(ctx, host.(*hosts.Host), kubeCluster.Certificates, kubeCluster.SystemImages.CertDownloader, pki.TempCertPath, kubeCluster.PrivateRegistriesMap)
+				if err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
 		})
 	}
 	return errgrp.Wait()
@@ -287,15 +300,22 @@ func fetchCertificatesFromEtcd(ctx context.Context, kubeCluster *Cluster) ([]byt
 }
 
 func (c *Cluster) SaveBackupCertificateBundle(ctx context.Context) error {
-	backupHosts := c.getBackupHosts()
 	var errgrp errgroup.Group
 
-	for _, host := range backupHosts {
-		runHost := host
+	hostsQueue := util.GetObjectQueue(c.getBackupHosts())
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			return pki.SaveBackupBundleOnHost(ctx, runHost, c.SystemImages.Alpine, services.EtcdSnapshotPath, c.PrivateRegistriesMap)
+			var errList []error
+			for host := range hostsQueue {
+				err := pki.SaveBackupBundleOnHost(ctx, host.(*hosts.Host), c.SystemImages.Alpine, services.EtcdSnapshotPath, c.PrivateRegistriesMap)
+				if err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
 		})
 	}
+
 	return errgrp.Wait()
 }
 
@@ -303,16 +323,19 @@ func (c *Cluster) ExtractBackupCertificateBundle(ctx context.Context) error {
 	backupHosts := c.getBackupHosts()
 	var errgrp errgroup.Group
 	errList := []string{}
-	for _, host := range backupHosts {
-		runHost := host
+
+	hostsQueue := util.GetObjectQueue(backupHosts)
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			if err := pki.ExtractBackupBundleOnHost(ctx, runHost, c.SystemImages.Alpine, services.EtcdSnapshotPath, c.PrivateRegistriesMap); err != nil {
-				errList = append(errList, fmt.Errorf(
-					"Failed to extract certificate bundle on host [%s], please make sure etcd bundle exist in /opt/yke/etcd-snapshots/pki.bundle.tar.gz: %v", runHost.Address, err).Error())
+			for host := range hostsQueue {
+				if err := pki.ExtractBackupBundleOnHost(ctx, host.(*hosts.Host), c.SystemImages.Alpine, services.EtcdSnapshotPath, c.PrivateRegistriesMap); err != nil {
+					errList = append(errList, fmt.Errorf("Failed to extract certificate bundle on host [%s], please make sure etcd bundle exist in /opt/rke/etcd-snapshots/pki.bundle.tar.gz: %v", host.(*hosts.Host).Address, err).Error())
+				}
 			}
 			return nil
 		})
 	}
+
 	errgrp.Wait()
 	if len(errList) == len(backupHosts) {
 		return fmt.Errorf(strings.Join(errList, ","))
@@ -333,7 +356,7 @@ func (c *Cluster) getBackupHosts() []*hosts.Host {
 
 func regenerateAPIAggregationCerts(c *Cluster, certificates map[string]pki.CertificatePKI) (map[string]pki.CertificatePKI, error) {
 	log.Debugf("[certificates] Regenerating Kubernetes API server aggregation layer requestheader client CA certificates")
-	requestHeaderCaCrt, requestHeaderCAKey, err := pki.GenerateCACertAndKey(pki.RequestHeaderCACertName)
+	requestHeaderCaCrt, requestHeaderCAKey, err := pki.GenerateCACertAndKey(pki.RequestHeaderCACertName, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -364,4 +387,55 @@ func deployAdminConfig(ctx context.Context, uniqueHosts []*hosts.Host, kubeAdmin
 
 func doDeployAdminConfig(ctx context.Context, host *hosts.Host, kubeAdminConfig string, alpineImage string, prsMap map[string]types.PrivateRegistry) error {
 	return host.WriteHostFile(ctx, KubeAdminConfigDeployer, KubeAdminConfigPath, kubeAdminConfig, alpineImage, prsMap)
+}
+
+func RotateKECertificates(ctx context.Context, c *Cluster, configPath, configDir string, components []string, rotateCACerts bool) error {
+	var (
+		serviceAccountTokenKey string
+	)
+	componentsCertsFuncMap := map[string]pki.GenFunc{
+		services.KubeAPIContainerName:        pki.GenerateKubeAPICertificate,
+		services.KubeControllerContainerName: pki.GenerateKubeControllerCertificate,
+		services.SchedulerContainerName:      pki.GenerateKubeSchedulerCertificate,
+		services.KubeproxyContainerName:      pki.GenerateKubeProxyCertificate,
+		services.KubeletContainerName:        pki.GenerateKubeNodeCertificate,
+		services.EtcdContainerName:           pki.GenerateEtcdCertificates,
+	}
+	if rotateCACerts {
+		// rotate CA cert and RequestHeader CA cert
+		if err := pki.GenerateKECACerts(ctx, c.Certificates, configPath, configDir); err != nil {
+			return err
+		}
+		components = nil
+	}
+	for _, k8sComponent := range components {
+		genFunc := componentsCertsFuncMap[k8sComponent]
+		if genFunc != nil {
+			if err := genFunc(ctx, c.Certificates, c.KubernetesEngineConfig, configPath, configDir); err != nil {
+				return err
+			}
+		}
+	}
+	if len(components) == 0 {
+		// do not rotate service account token
+		if c.Certificates[pki.ServiceAccountTokenKeyName].Key != nil {
+			serviceAccountTokenKey = string(cert.EncodePrivateKeyPEM(c.Certificates[pki.ServiceAccountTokenKeyName].Key))
+		}
+		if err := pki.GenerateKEServicesCerts(ctx, c.Certificates, c.KubernetesEngineConfig, configPath, configDir); err != nil {
+			return err
+		}
+		if serviceAccountTokenKey != "" {
+			privateKey, err := cert.ParsePrivateKeyPEM([]byte(serviceAccountTokenKey))
+			if err != nil {
+				return err
+			}
+			c.Certificates[pki.ServiceAccountTokenKeyName] = pki.ToCertObject(
+				pki.ServiceAccountTokenKeyName,
+				pki.ServiceAccountTokenKeyName,
+				"",
+				c.Certificates[pki.ServiceAccountTokenKeyName].Certificate,
+				privateKey.(*rsa.PrivateKey))
+		}
+	}
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"path"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 	"k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -18,6 +19,20 @@ import (
 	"yunion.io/x/yke/pkg/pki"
 	"yunion.io/x/yke/pkg/types"
 )
+
+const (
+	stateFileExt = ".ykestate"
+)
+
+type YKEFullState struct {
+	DesiredState YKEState `json:"desiredState,omitempty"`
+	CurrentState YKEState `json:"currentState,omitempty"`
+}
+
+type YKEState struct {
+	KubernetesEngineConfig *types.KubernetesEngineConfig `json:"ykeConfig,omitempty"`
+	CertificatesBundle     map[string]pki.CertificatePKI `json:"certificatesBundle,omitempty"`
+}
 
 func (c *Cluster) SaveClusterState(ctx context.Context, config *types.KubernetesEngineConfig) error {
 	if len(c.ControlPlaneHosts) > 0 {
@@ -155,10 +170,15 @@ func saveStateToNodes(ctx context.Context, uniqueHosts []*hosts.Host, clusterSta
 	if err != nil {
 		return err
 	}
+	var errgrp errgroup.Group
 	for _, host := range uniqueHosts {
-		if err := pki.DeployStateOnPlaneHost(ctx, host, alpineImage, prsMap, string(clusterFile)); err != nil {
-			return err
-		}
+		runHost := host
+		errgrp.Go(func() error {
+			return pki.DeployStateOnPlaneHost(ctx, runHost, alpineImage, prsMap, string(clusterFile))
+		})
+	}
+	if err := errgrp.Wait(); err != nil {
+		return err
 	}
 	return nil
 }

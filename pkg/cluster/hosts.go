@@ -14,6 +14,7 @@ import (
 	"yunion.io/x/yke/pkg/pki"
 	"yunion.io/x/yke/pkg/services"
 	ytypes "yunion.io/x/yke/pkg/types"
+	"yunion.io/x/yke/pkg/util"
 )
 
 const (
@@ -31,15 +32,23 @@ func (c *Cluster) TunnelHosts(ctx context.Context, local bool) error {
 	}
 	c.InactiveHosts = make([]*hosts.Host, 0)
 	uniqueHosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
-	for i := range uniqueHosts {
-		if err := uniqueHosts[i].TunnelUp(ctx, c.DockerDialerFactory, c.PrefixPath, c.Version); err != nil {
-			// Unsupported Docker version is NOT a connectivity problem that we can recover! So we bail out on it
-			if strings.Contains(err.Error(), "Unsupported Docker version found") {
-				return err
+	var errgrp errgroup.Group
+	for _, uniqueHost := range uniqueHosts {
+		runHost := uniqueHost
+		errgrp.Go(func() error {
+			if err := runHost.TunnelUp(ctx, c.DockerDialerFactory, c.PrefixPath, c.Version); err != nil {
+				// Unsupported Docker version is NOT a connectivity problem that we can recover! So we bail out on it
+				if strings.Contains(err.Error(), "Unsupported Docker version found") {
+					return err
+				}
+				log.Warningf("Failed to set up SSH tunneling for host [%s]: %v", runHost.Address, err)
+				c.InactiveHosts = append(c.InactiveHosts, runHost)
 			}
-			log.Warningf("Failed to set up SSH tunneling for host [%s]: %v", uniqueHosts[i].Address, err)
-			c.InactiveHosts = append(c.InactiveHosts, uniqueHosts[i])
-		}
+			return nil
+		})
+	}
+	if err := errgrp.Wait(); err != nil {
+		return err
 	}
 	for _, host := range c.InactiveHosts {
 		log.Warningf("Removing host [%s] from node lists", host.Address)
@@ -106,18 +115,25 @@ func (c *Cluster) InvertIndexHosts() error {
 	return nil
 }
 
-func (c *Cluster) SetUpHosts(ctx context.Context) error {
+func (c *Cluster) SetUpHosts(ctx context.Context, rotateCerts bool) error {
 	if c.Authentication.Strategy == X509AuthenticationProvider {
 		log.Infof("[certificates] Deploying kubernetes certificates to Cluster nodes")
-		hosts := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
+		hostList := hosts.GetUniqueHostList(c.EtcdHosts, c.ControlPlaneHosts, c.WorkerHosts)
 		var errgrp errgroup.Group
-
-		for _, host := range hosts {
-			runHost := host
+		hostsQueue := util.GetObjectQueue(hostList)
+		for w := 0; w < WorkerThreads; w++ {
 			errgrp.Go(func() error {
-				return pki.DeployCertificatesOnPlaneHost(ctx, runHost, c.KubernetesEngineConfig, c.Certificates, c.SystemImages.CertDownloader, c.PrivateRegistriesMap)
+				var errList []error
+				for host := range hostsQueue {
+					err := pki.DeployCertificatesOnPlaneHost(ctx, host.(*hosts.Host), c.KubernetesEngineConfig, c.Certificates, c.SystemImages.CertDownloader, c.PrivateRegistriesMap, rotateCerts)
+					if err != nil {
+						errList = append(errList, err)
+					}
+				}
+				return util.ErrList(errList)
 			})
 		}
+
 		if err := errgrp.Wait(); err != nil {
 			return err
 		}
@@ -125,15 +141,15 @@ func (c *Cluster) SetUpHosts(ctx context.Context) error {
 		if err := pki.DeployAdminConfig(ctx, c.Certificates[pki.KubeAdminCertName].Config, c.LocalKubeConfigPath); err != nil {
 			return err
 		}
-		if err := deployAdminConfig(ctx, hosts, c.Certificates[pki.KubeAdminCertName].Config, c.SystemImages.Alpine, c.PrivateRegistriesMap); err != nil {
+		if err := deployAdminConfig(ctx, hostList, c.Certificates[pki.KubeAdminCertName].Config, c.SystemImages.Alpine, c.PrivateRegistriesMap); err != nil {
 			return err
 		}
-		if err := deployLogrotateConfig(ctx, hosts, c.YunionConfig.DockerGraphDir, c.SystemImages.Alpine, c.PrivateRegistriesMap); err != nil {
+		if err := deployLogrotateConfig(ctx, hostList, c.YunionConfig.DockerGraphDir, c.SystemImages.Alpine, c.PrivateRegistriesMap); err != nil {
 			return err
 		}
 		log.Infof("[certificates] Successfully deployed kubernetes certificates to Cluster nodes")
 		if c.CloudProvider.Name != "" {
-			if err := deployCloudProviderConfig(ctx, hosts, c.SystemImages.Alpine, c.PrivateRegistriesMap, c.CloudConfigFile); err != nil {
+			if err := deployCloudProviderConfig(ctx, hostList, c.SystemImages.Alpine, c.PrivateRegistriesMap, c.CloudConfigFile); err != nil {
 				return err
 			}
 			log.Infof("[%s] Successfully deployed kubernetes cloud config to Cluster nodes", CloudConfigServiceName)
