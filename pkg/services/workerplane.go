@@ -10,6 +10,7 @@ import (
 	"yunion.io/x/yke/pkg/hosts"
 	"yunion.io/x/yke/pkg/pki"
 	"yunion.io/x/yke/pkg/types"
+	"yunion.io/x/yke/pkg/util"
 )
 
 const (
@@ -29,27 +30,19 @@ func RunWorkerPlane(
 ) error {
 	log.Infof("[%s] Building up Worker Plane..", WorkerRole)
 	var errgrp errgroup.Group
-	for _, host := range allHosts {
-		if updateWorkersOnly {
-			if !host.UpdateWorker {
-				continue
-			}
-		}
-		if !host.IsWorker {
-			if host.IsEtcd {
-				// Add unschedulable taint
-				host.ToAddTaints = append(host.ToAddTaints, unschedulableEtcdTaint)
-			}
-			if host.IsControl {
-				// Add unscheduable taint
-				host.ToAddTaints = append(host.ToAddTaints, unschedulableControlTaint)
-			}
-		}
-		runHost := host
-		// maps are not thread safe
-		hostProcessMap := copyProcessMap(workerNodePlanMap[runHost.Address].Processes)
+
+	hostsQueue := util.GetObjectQueue(allHosts)
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			return doDeployWorkerPlane(ctx, runHost, localConnDialerFactory, prsMap, hostProcessMap, certMap, alpineImage)
+			var errList []error
+			for host := range hostsQueue {
+				runHost := host.(*hosts.Host)
+				err := doDeployWorkerPlaneHost(ctx, runHost, localConnDialerFactory, prsMap, workerNodePlanMap[runHost.Address].Processes, certMap, updateWorkersOnly, alpineImage)
+				if err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
 		})
 	}
 	if err := errgrp.Wait(); err != nil {
@@ -59,33 +52,63 @@ func RunWorkerPlane(
 	return nil
 }
 
-func RemoveWorkerPlane(ctx context.Context, workerHosts []*hosts.Host, force bool) error {
-	log.Infof("[%s] Tearing down Worker Plane..", WorkerRole)
-	for _, host := range workerHosts {
-		// check if the host already is a controlplane
-		if host.IsControl && !force {
-			log.Infof("[%s] Host [%s] is already a controlplane host, nothing to do.", WorkerRole, host.Address)
+func doDeployWorkerPlaneHost(ctx context.Context, host *hosts.Host, localConnDialerFactory hosts.DialerFactory, prsMap map[string]types.PrivateRegistry, processMap map[string]types.Process, certMap map[string]pki.CertificatePKI, updateWorkersOnly bool, alpineImage string) error {
+	if updateWorkersOnly {
+		if !host.UpdateWorker {
 			return nil
 		}
+	}
+	if !host.IsWorker {
+		if host.IsEtcd {
+			// Add unschedulable taint
+			host.ToAddTaints = append(host.ToAddTaints, unschedulableEtcdTaint)
+		}
+		if host.IsControl {
+			// Add unschedulable taint
+			host.ToAddTaints = append(host.ToAddTaints, unschedulableControlTaint)
+		}
+	}
+	return doDeployWorkerPlane(ctx, host, localConnDialerFactory, prsMap, processMap, certMap, alpineImage)
+}
 
-		if err := removeKubelet(ctx, host); err != nil {
-			return err
-		}
-		if err := removeKubeproxy(ctx, host); err != nil {
-			return err
-		}
-		if err := removeNginxProxy(ctx, host); err != nil {
-			return err
-		}
-		if err := removeSidekick(ctx, host); err != nil {
-			return err
-		}
-		if err := removeK8sContainer(ctx, host); err != nil {
-			return err
-		}
-		log.Infof("[%s] Successfully tore down Worker Plane..", WorkerRole)
+func RemoveWorkerPlane(ctx context.Context, workerHosts []*hosts.Host, force bool) error {
+	log.Infof("[%s] Tearing down Worker Plane..", WorkerRole)
+	var errgrp errgroup.Group
+	hostsQueue := util.GetObjectQueue(workerHosts)
+	for w := 0; w < WorkerThreads; w++ {
+		errgrp.Go(func() error {
+			var errList []error
+			for host := range hostsQueue {
+				runHost := host.(*hosts.Host)
+				if runHost.IsControl && !force {
+					log.Infof("[%s] Host [%s] is already a controlplane host, nothing to do.", WorkerRole, runHost.Address)
+					return nil
+				}
+
+				if err := removeKubelet(ctx, runHost); err != nil {
+					errList = append(errList, err)
+				}
+				if err := removeKubeproxy(ctx, runHost); err != nil {
+					errList = append(errList, err)
+				}
+				if err := removeNginxProxy(ctx, runHost); err != nil {
+					errList = append(errList, err)
+				}
+				if err := removeSidekick(ctx, runHost); err != nil {
+					errList = append(errList, err)
+				}
+				if err := removeK8sContainer(ctx, runHost); err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
+		})
 	}
 
+	if err := errgrp.Wait(); err != nil {
+		return err
+	}
+	log.Infof("[%s] Successfully tore down Worker Plane..", WorkerRole)
 	return nil
 }
 
@@ -115,4 +138,35 @@ func copyProcessMap(m map[string]types.Process) map[string]types.Process {
 		c[k] = v
 	}
 	return c
+}
+
+func RestartWorkerPlane(ctx context.Context, workerHosts []*hosts.Host) error {
+	log.Infof("[%s] Restarting Worker Plane..", WorkerRole)
+	var errgrp errgroup.Group
+
+	hostsQueue := util.GetObjectQueue(workerHosts)
+	for w := 0; w < WorkerThreads; w++ {
+		errgrp.Go(func() error {
+			var errList []error
+			for host := range hostsQueue {
+				runHost := host.(*hosts.Host)
+				if err := restartKubelet(ctx, runHost); err != nil {
+					errList = append(errList, err)
+				}
+				if err := restartKubeproxy(ctx, runHost); err != nil {
+					errList = append(errList, err)
+				}
+				if err := restartNginxProxy(ctx, runHost); err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
+		})
+	}
+	if err := errgrp.Wait(); err != nil {
+		return err
+	}
+	log.Infof("[%s] Successfully restarted Worker Plane..", WorkerRole)
+
+	return nil
 }

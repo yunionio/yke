@@ -16,6 +16,7 @@ import (
 	"yunion.io/x/yke/pkg/hosts"
 	"yunion.io/x/yke/pkg/templates"
 	"yunion.io/x/yke/pkg/types"
+	"yunion.io/x/yke/pkg/util"
 )
 
 const (
@@ -207,12 +208,19 @@ func (c *Cluster) deployTCPPortListeners(ctx context.Context, currentCluster *Cl
 	return nil
 }
 
-func (c *Cluster) deployListenerOnPlane(ctx context.Context, portList []string, holstPlane []*hosts.Host, containerName string) error {
+func (c *Cluster) deployListenerOnPlane(ctx context.Context, portList []string, hostPlane []*hosts.Host, containerName string) error {
 	var errgrp errgroup.Group
-	for _, host := range holstPlane {
-		runHost := host
+	hostsQueue := util.GetObjectQueue(hostPlane)
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			return c.deployListener(ctx, runHost, portList, containerName)
+			var errList []error
+			for host := range hostsQueue {
+				err := c.deployListener(ctx, host.(*hosts.Host), portList, containerName)
+				if err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
 		})
 	}
 	return errgrp.Wait()
@@ -268,10 +276,19 @@ func (c *Cluster) removeTCPPortListeners(ctx context.Context) error {
 
 func removeListenerFromPlane(ctx context.Context, hostPlane []*hosts.Host, containerName string) error {
 	var errgrp errgroup.Group
-	for _, host := range hostPlane {
-		runHost := host
+
+	hostsQueue := util.GetObjectQueue(hostPlane)
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			return docker.DoRemoveContainer(ctx, runHost.DClient, containerName, runHost.Address)
+			var errList []error
+			for host := range hostsQueue {
+				runHost := host.(*hosts.Host)
+				err := docker.DoRemoveContainer(ctx, runHost.DClient, containerName, runHost.Address)
+				if err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
 		})
 	}
 	return errgrp.Wait()
@@ -283,10 +300,17 @@ func (c *Cluster) runServicePortChecks(ctx context.Context) error {
 	// one etcd host is a pass
 	if len(c.EtcdHosts) > 1 {
 		log.Infof("[network] Running etcd <-> etcd port checks")
-		for _, host := range c.EtcdHosts {
-			runHost := host
+		hostsQueue := util.GetObjectQueue(c.EtcdHosts)
+		for w := 0; w < WorkerThreads; w++ {
 			errgrp.Go(func() error {
-				return checkPlaneTCPPortsFromHost(ctx, runHost, EtcdPortList, c.EtcdHosts, c.SystemImages.Alpine, c.PrivateRegistriesMap)
+				var errList []error
+				for host := range hostsQueue {
+					err := checkPlaneTCPPortsFromHost(ctx, host.(*hosts.Host), EtcdPortList, c.EtcdHosts, c.SystemImages.Alpine, c.PrivateRegistriesMap)
+					if err != nil {
+						errList = append(errList, err)
+					}
+				}
+				return util.ErrList(errList)
 			})
 		}
 		if err := errgrp.Wait(); err != nil {
@@ -295,10 +319,17 @@ func (c *Cluster) runServicePortChecks(ctx context.Context) error {
 	}
 	// check control -> etcd connectivity
 	log.Infof("[network] Running control plane -> etcd port checks")
-	for _, host := range c.ControlPlaneHosts {
-		runHost := host
+	hostsQueue := util.GetObjectQueue(c.ControlPlaneHosts)
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			return checkPlaneTCPPortsFromHost(ctx, runHost, EtcdPortList, c.EtcdHosts, c.SystemImages.Alpine, c.PrivateRegistriesMap)
+			var errList []error
+			for host := range hostsQueue {
+				err := checkPlaneTCPPortsFromHost(ctx, host.(*hosts.Host), EtcdClientPortList, c.EtcdHosts, c.SystemImages.Alpine, c.PrivateRegistriesMap)
+				if err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
 		})
 	}
 	if err := errgrp.Wait(); err != nil {
@@ -306,10 +337,17 @@ func (c *Cluster) runServicePortChecks(ctx context.Context) error {
 	}
 	// check controle plane -> Workers
 	log.Infof("[network] Running control plane -> worker port checks")
-	for _, host := range c.ControlPlaneHosts {
-		runHost := host
+	hostsQueue = util.GetObjectQueue(c.ControlPlaneHosts)
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			return checkPlaneTCPPortsFromHost(ctx, runHost, WorkerPortList, c.WorkerHosts, c.SystemImages.Alpine, c.PrivateRegistriesMap)
+			var errList []error
+			for host := range hostsQueue {
+				err := checkPlaneTCPPortsFromHost(ctx, host.(*hosts.Host), WorkerPortList, c.WorkerHosts, c.SystemImages.Alpine, c.PrivateRegistriesMap)
+				if err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
 		})
 	}
 	if err := errgrp.Wait(); err != nil {
@@ -317,10 +355,17 @@ func (c *Cluster) runServicePortChecks(ctx context.Context) error {
 	}
 	// check workers -> control plane
 	log.Infof("[network] Running workers -> control plane port checks")
-	for _, host := range c.WorkerHosts {
-		runHost := host
+	hostsQueue = util.GetObjectQueue(c.WorkerHosts)
+	for w := 0; w < WorkerThreads; w++ {
 		errgrp.Go(func() error {
-			return checkPlaneTCPPortsFromHost(ctx, runHost, ControlPlanePortList, c.ControlPlaneHosts, c.SystemImages.Alpine, c.PrivateRegistriesMap)
+			var errList []error
+			for host := range hostsQueue {
+				err := checkPlaneTCPPortsFromHost(ctx, host.(*hosts.Host), ControlPlanePortList, c.ControlPlaneHosts, c.SystemImages.Alpine, c.PrivateRegistriesMap)
+				if err != nil {
+					errList = append(errList, err)
+				}
+			}
+			return util.ErrList(errList)
 		})
 	}
 	return errgrp.Wait()

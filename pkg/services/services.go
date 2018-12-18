@@ -12,6 +12,7 @@ import (
 	"yunion.io/x/yke/pkg/docker"
 	"yunion.io/x/yke/pkg/hosts"
 	"yunion.io/x/yke/pkg/types"
+	"yunion.io/x/yke/pkg/util"
 )
 
 const (
@@ -41,6 +42,8 @@ const (
 	KubeControllerPort = 10252
 	KubeletPort        = 10250
 	KubeproxyPort      = 10256
+
+	WorkerThreads = util.WorkerThreads
 
 	LogsPath = "/var/lib/yunion/yke/log"
 )
