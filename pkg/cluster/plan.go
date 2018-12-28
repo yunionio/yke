@@ -116,11 +116,11 @@ func (c *Cluster) BuildKubeAPIProcess(prefixPath string) types.Process {
 	}
 
 	CommandArgs := map[string]string{
-		"insecure-bind-address":              "127.0.0.1",
-		"bind-address":                       "0.0.0.0",
-		"insecure-port":                      "0",
-		"secure-port":                        "6443",
-		"cloud-provider":                     c.CloudProvider.Name,
+		"insecure-bind-address": "127.0.0.1",
+		"bind-address":          "0.0.0.0",
+		"insecure-port":         "0",
+		"secure-port":           "6443",
+		//"cloud-provider":                     c.CloudProvider.Name,
 		"allow-privileged":                   "true",
 		"kubelet-preferred-address-types":    "InternalIP,ExternalIP,Hostname",
 		"service-cluster-ip-range":           c.Services.KubeAPI.ServiceClusterIPRange,
@@ -145,14 +145,14 @@ func (c *Cluster) BuildKubeAPIProcess(prefixPath string) types.Process {
 		"requestheader-group-headers":        "X-Remote-Group",
 		"requestheader-username-headers":     "X-Remote-User",
 	}
-	if len(c.CloudProvider.Name) > 0 {
-		CommandArgs["cloud-config"] = CloudConfigPath
-	}
-	if len(c.CloudProvider.Name) > 0 {
-		c.Services.KubeAPI.ExtraEnv = append(
-			c.Services.KubeAPI.ExtraEnv,
-			fmt.Sprintf("%s=%s", CloudConfigSumEnv, getCloudConfigChecksum(c.CloudProvider)))
-	}
+	//if len(c.CloudProvider.Name) > 0 {
+	//CommandArgs["cloud-config"] = CloudConfigPath
+	//}
+	//if len(c.CloudProvider.Name) > 0 {
+	//c.Services.KubeAPI.ExtraEnv = append(
+	//c.Services.KubeAPI.ExtraEnv,
+	//fmt.Sprintf("%s=%s", CloudConfigSumEnv, getCloudConfigChecksum(c.CloudProvider)))
+	//}
 	// check if our vresion has specific options for this component
 	serviceOptions := c.GetKubernetesServicesOptions()
 	if serviceOptions.KubeAPI != nil {
@@ -229,8 +229,9 @@ func (c *Cluster) BuildKubeControllerProcess(prefixPath string) types.Process {
 	}
 
 	CommandArgs := map[string]string{
-		"address":                     "0.0.0.0",
-		"cloud-provider":              c.CloudProvider.Name,
+		"address": "0.0.0.0",
+		//"cloud-provider":              c.CloudProvider.Name,
+		"cloud-provider":              "extra", // use external cloud provider
 		"allow-untagged-cloud":        "true",
 		"configure-cloud-routes":      "false",
 		"leader-elect":                "true",
@@ -245,14 +246,14 @@ func (c *Cluster) BuildKubeControllerProcess(prefixPath string) types.Process {
 		"service-account-private-key-file": pki.GetKeyPath(pki.ServiceAccountTokenKeyName),
 		"root-ca-file":                     pki.GetCertPath(pki.CACertName),
 	}
-	if len(c.CloudProvider.Name) > 0 {
-		CommandArgs["cloud-config"] = CloudConfigPath
-	}
-	if len(c.CloudProvider.Name) > 0 {
-		c.Services.KubeController.ExtraEnv = append(
-			c.Services.KubeController.ExtraEnv,
-			fmt.Sprintf("%s=%s", CloudConfigSumEnv, getCloudConfigChecksum(c.CloudProvider)))
-	}
+	//if len(c.CloudProvider.Name) > 0 {
+	//CommandArgs["cloud-config"] = CloudConfigPath
+	//}
+	//if len(c.CloudProvider.Name) > 0 {
+	//c.Services.KubeController.ExtraEnv = append(
+	//c.Services.KubeController.ExtraEnv,
+	//fmt.Sprintf("%s=%s", CloudConfigSumEnv, getCloudConfigChecksum(c.CloudProvider)))
+	//}
 	// check if our version has specific options for this component
 	serviceOptions := c.GetKubernetesServicesOptions()
 	if serviceOptions.KubeController != nil {
@@ -320,22 +321,22 @@ func (c *Cluster) BuildKubeletProcess(host *hosts.Host, prefixPath string) types
 	}
 
 	CommandArgs := map[string]string{
-		"v":                            "2",
-		"address":                      "0.0.0.0",
-		"cadvisor-port":                "0", // depricated in 1.12
-		"read-only-port":               "0",
-		"cluster-domain":               c.ClusterDomain,
-		"pod-infra-container-image":    c.Services.Kubelet.InfraContainerImage,
-		"cgroups-per-qos":              "True",
-		"enforce-node-allocatable":     "",
-		"hostname-override":            host.HostnameOverride,
-		"cluster-dns":                  c.ClusterDNSServer,
-		"network-plugin":               "cni",
-		"cni-conf-dir":                 "/etc/cni/net.d",
-		"cni-bin-dir":                  "/opt/cni/bin",
-		"resolv-conf":                  "/etc/resolv.conf",
-		"allow-privileged":             "true",
-		"cloud-provider":               c.CloudProvider.Name,
+		"v":                         "2",
+		"address":                   "0.0.0.0",
+		"cadvisor-port":             "0", // depricated in 1.12
+		"read-only-port":            "0",
+		"cluster-domain":            c.ClusterDomain,
+		"pod-infra-container-image": c.Services.Kubelet.InfraContainerImage,
+		"cgroups-per-qos":           "True",
+		"enforce-node-allocatable":  "",
+		"hostname-override":         host.HostnameOverride,
+		"cluster-dns":               c.ClusterDNSServer,
+		"network-plugin":            "cni",
+		"cni-conf-dir":              "/etc/cni/net.d",
+		"cni-bin-dir":               "/opt/cni/bin",
+		"resolv-conf":               "/etc/resolv.conf",
+		"allow-privileged":          "true",
+		//"cloud-provider":               c.CloudProvider.Name,
 		"kubeconfig":                   pki.GetConfigPath(pki.KubeNodeCertName),
 		"client-ca-file":               pki.GetCertPath(pki.CACertName),
 		"anonymous-auth":               "false",
@@ -350,14 +351,14 @@ func (c *Cluster) BuildKubeletProcess(host *hosts.Host, prefixPath string) types
 	if host.Address != host.InternalAddress {
 		CommandArgs["node-ip"] = host.InternalAddress
 	}
-	if len(c.CloudProvider.Name) > 0 {
-		CommandArgs["cloud-config"] = CloudConfigPath
-	}
-	if len(c.CloudProvider.Name) > 0 {
-		c.Services.Kubelet.ExtraEnv = append(
-			c.Services.Kubelet.ExtraEnv,
-			fmt.Sprintf("%s=%s", CloudConfigSumEnv, getCloudConfigChecksum(c.CloudProvider)))
-	}
+	//if len(c.CloudProvider.Name) > 0 {
+	//CommandArgs["cloud-config"] = CloudConfigPath
+	//}
+	//if len(c.CloudProvider.Name) > 0 {
+	//c.Services.Kubelet.ExtraEnv = append(
+	//c.Services.Kubelet.ExtraEnv,
+	//fmt.Sprintf("%s=%s", CloudConfigSumEnv, getCloudConfigChecksum(c.CloudProvider)))
+	//}
 	if len(c.PrivateRegistriesMap) > 0 {
 		kubeletDockerConfig, _ := docker.GetKubeletDockerConfig(c.PrivateRegistriesMap)
 		c.Services.Kubelet.ExtraEnv = append(

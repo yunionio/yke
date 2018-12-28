@@ -32,9 +32,10 @@ const (
 	KubeDNSAddonAppName            = "kube-dns"
 	KubeDNSAutoscalerAppName       = "kube-dns-autoscaler"
 
-	TillerAddonResourceName    = "yke-tiller-addon"
-	HeapsterAddonResourceName  = "yke-heapster-addon"
-	YunionCloudMonResourceName = "yke-yunion-cloudmon-addon"
+	TillerAddonResourceName         = "yke-tiller-addon"
+	HeapsterAddonResourceName       = "yke-heapster-addon"
+	YunionCloudMonResourceName      = "yke-yunion-cloudmon-addon"
+	YunionCloudProviderResourceName = "yke-yunion-cloudprovider-addon"
 )
 
 var DNSProviders = []string{"kubedns", "coredns"}
@@ -142,11 +143,12 @@ func (c *Cluster) deployK8sAddOns(ctx context.Context) error {
 	}
 
 	for key, df := range map[string]func(ctx context.Context) error{
-		IngressAddonResourceName:   c.deployIngress,
-		YunionCSIAddonResourceName: c.deployYunionCSI,
-		TillerAddonResourceName:    c.deployTiller,
-		HeapsterAddonResourceName:  c.deployHeapster,
-		YunionCloudMonResourceName: c.deployYunionCloudMon,
+		IngressAddonResourceName:        c.deployIngress,
+		YunionCSIAddonResourceName:      c.deployYunionCSI,
+		TillerAddonResourceName:         c.deployTiller,
+		HeapsterAddonResourceName:       c.deployHeapster,
+		YunionCloudMonResourceName:      c.deployYunionCloudMon,
+		YunionCloudProviderResourceName: c.deployYunionCloudProvider,
 	} {
 		if err := df(ctx); err != nil {
 			if err, ok := err.(*addonError); ok && err.isCritical {
@@ -584,6 +586,20 @@ func (c *Cluster) deployYunionCloudMon(ctx context.Context) error {
 		return err
 	}
 	log.Infof("[addons] Yunion cloud monitor deployed successfully...")
+	return nil
+}
+
+func (c *Cluster) deployYunionCloudProvider(ctx context.Context) error {
+	log.Infof("[addons] setting up yunion cloud provider plugin")
+	config := map[string]string{"CloudProviderImage": c.SystemImages.YunionCloudProvider}
+	yaml, err := addons.GetYunionCloudProviderManifest(config)
+	if err != nil {
+		return err
+	}
+	if err := c.doAddonDeployAsync(ctx, yaml, YunionCloudProviderResourceName, false); err != nil {
+		return err
+	}
+	log.Infof("[addons] Yunion cloud provider deployed successfully...")
 	return nil
 }
 

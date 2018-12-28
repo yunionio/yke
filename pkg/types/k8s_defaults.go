@@ -82,6 +82,7 @@ var (
 			Tiller:                    m("yunion/tiller:v2.9.1"),
 			Heapster:                  m("yunion/heapster-amd64:v1.5.4"),
 			YunionCloudMonitor:        m("yunion/cloudmon:latest"),
+			YunionCloudProvider:       m("yunion/cloud-controller-manager:v2.4.0"),
 		},
 		"v1.11.3-rancher1-1": {
 			Etcd:                      m("quay.io/coreos/etcd:v3.2.18"),
@@ -107,6 +108,7 @@ var (
 			Tiller:                    m("yunion/tiller:v2.11.0"),
 			Heapster:                  m("yunion/heapster-amd64:v1.5.4"),
 			YunionCloudMonitor:        m("yunion/cloudmon:latest"),
+			YunionCloudProvider:       m("yunion/cloud-controller-manager:v2.4.0"),
 		},
 		"v1.12.3-rancher1-1": {
 			Etcd:                      m("quay.io/coreos/etcd:v3.2.24"),
@@ -132,6 +134,7 @@ var (
 			Tiller:                    m("yunion/tiller:v2.11.0"),
 			Heapster:                  m("yunion/heapster-amd64:v1.5.4"),
 			YunionCloudMonitor:        m("yunion/cloudmon:latest"),
+			YunionCloudProvider:       m("yunion/cloud-controller-manager:v2.4.0"),
 		},
 	}
 )
