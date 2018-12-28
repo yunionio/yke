@@ -124,8 +124,9 @@ type SystemImages struct {
 	//// Influxdb image for heapster addon
 	//Influxdb string `yaml:"influxdb" json:"influxdb"`
 	//// Tiller addon image
-	Tiller             string `yaml:"tiller" json:"tiller"`
-	YunionCloudMonitor string `yaml:"yunion_cloud_monitor" json:"yunionCloudMonitor"`
+	Tiller              string `yaml:"tiller" json:"tiller"`
+	YunionCloudMonitor  string `yaml:"yunion_cloud_monitor" json:"yunionCloudMonitor"`
+	YunionCloudProvider string `yaml:"yunion_cloud_provider" json:"yunionCloudProvider"`
 }
 
 type ConfigNode struct {
@@ -386,9 +387,17 @@ type PortCheck struct {
 
 type CloudProvider struct {
 	// Name of the Cloud Provider
-	Name string `yaml:"name" json:"name"`
-	// Configuration Options of Cloud Provider
-	CloudConfig map[string]string `yaml:"cloud_config" json:"cloudConfig"`
+	Name                string               `yaml:"name" json:"name"`
+	YunionCloudProvider *YunionCloudProvider `yaml:"yunionCloudProvider,omitempty" json:"yunionCloudProvider,omitempty"`
+}
+
+type YunionCloudProvider struct {
+	AuthURL       string `yaml:"auth_url" json:"auth_url"`
+	AdminUser     string `yaml:"admin_user" json:"admin_user"`
+	AdminPassword string `yaml:"admin_password" json:"admin_password"`
+	AdminProject  string `yaml:"admin_project" json:"admin_project"`
+	Region        string `yaml:"region" json:"region"`
+	Cluster       string `yaml:"cluster" json:"cluster"`
 }
 
 type KubernetesServicesOptions struct {
