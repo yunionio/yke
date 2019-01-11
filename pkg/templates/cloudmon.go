@@ -57,9 +57,9 @@ data:
     yunion.rc.async-job.fixed-rate=300000
     yunion.rc.async-job.fixed-thread-pool=10
 
-    yunion.rc.influxdb.url={{.InfluxdbUrl}}
-    yunion.rc.influxdb.database=cloudmon
+    yunion.rc.influxdb.database=telegraf
+    yunion.rc.influxdb.policy=30day_only
     yunion.rc.influxdb.measurement=instance
 
-    yunion.rc.metrics.ins.providers=Aliyun,Azure
+    yunion.rc.metrics.ins.providers=Aliyun,Azure,Aws,Qcloud,VMWare
     yunion.rc.metrics.eip.providers=Aliyun`
