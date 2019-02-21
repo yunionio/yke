@@ -9,3 +9,7 @@ func GetYunionCloudMoniotrManifest(config interface{}) (string, error) {
 func GetYunionCloudProviderManifest(config interface{}) (string, error) {
 	return templates.CompileTemplateFromMap(templates.YunionCloudProviderTemplate, config)
 }
+
+func GetOnecloudClusterapiManifest(config interface{}) (string, error) {
+	return templates.CompileTemplateFromMap(templates.ClusterAPITemplate, config)
+}

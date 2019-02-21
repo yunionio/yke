@@ -36,6 +36,7 @@ const (
 	HeapsterAddonResourceName       = "yke-heapster-addon"
 	YunionCloudMonResourceName      = "yke-yunion-cloudmon-addon"
 	YunionCloudProviderResourceName = "yke-yunion-cloudprovider-addon"
+	OnecloudClusterapiResourceName  = "onecloud-clusterapi-addon"
 )
 
 var DNSProviders = []string{"kubedns", "coredns"}
@@ -93,6 +94,15 @@ type YunionCSIOptions struct {
 	CSIImage           string
 }
 
+type OnecloudClusterapiOptions struct {
+	YunionAuthURL      string
+	YunionAdminUser    string
+	YunionAdminPasswd  string
+	YunionAdminProject string
+	YunionRegion       string
+	Image              string
+}
+
 type TillerOptions struct {
 	TillerImage string
 }
@@ -143,12 +153,13 @@ func (c *Cluster) deployK8sAddOns(ctx context.Context) error {
 	}
 
 	for key, df := range map[string]func(ctx context.Context) error{
-		IngressAddonResourceName:        c.deployIngress,
-		YunionCSIAddonResourceName:      c.deployYunionCSI,
-		TillerAddonResourceName:         c.deployTiller,
-		HeapsterAddonResourceName:       c.deployHeapster,
-		YunionCloudMonResourceName:      c.deployYunionCloudMon,
+		IngressAddonResourceName:   c.deployIngress,
+		YunionCSIAddonResourceName: c.deployYunionCSI,
+		TillerAddonResourceName:    c.deployTiller,
+		HeapsterAddonResourceName:  c.deployHeapster,
+		//YunionCloudMonResourceName:      c.deployYunionCloudMon,
 		YunionCloudProviderResourceName: c.deployYunionCloudProvider,
+		OnecloudClusterapiResourceName:  c.deployOnecloudClusterAPI,
 	} {
 		if err := df(ctx); err != nil {
 			if err, ok := err.(*addonError); ok && err.isCritical {
@@ -600,6 +611,27 @@ func (c *Cluster) deployYunionCloudProvider(ctx context.Context) error {
 		return err
 	}
 	log.Infof("[addons] Yunion cloud provider deployed successfully...")
+	return nil
+}
+
+func (c *Cluster) deployOnecloudClusterAPI(ctx context.Context) error {
+	log.Infof("[addons] setting up onecloud cluster API")
+	config := OnecloudClusterapiOptions{
+		YunionAuthURL:      c.YunionConfig.AuthURL,
+		YunionAdminUser:    c.YunionConfig.AdminUser,
+		YunionAdminPasswd:  c.YunionConfig.AdminPassword,
+		YunionAdminProject: c.YunionConfig.AdminProject,
+		YunionRegion:       c.YunionConfig.Region,
+		Image:              c.SystemImages.OnecloudClusterapi,
+	}
+	yaml, err := addons.GetOnecloudClusterapiManifest(config)
+	if err != nil {
+		return err
+	}
+	if err := c.doAddonDeployAsync(ctx, yaml, OnecloudClusterapiResourceName, false); err != nil {
+		return err
+	}
+	log.Infof("[addons] Onecloud clusterapi deployed successfully...")
 	return nil
 }
 
