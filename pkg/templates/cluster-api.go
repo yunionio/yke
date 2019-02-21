@@ -1074,14 +1074,13 @@ spec:
       # the node selector may vary depending on your cluster setup
       containers:
       - name: manager
-        #image: yunion/yunion-cloud-controller-manager:v2.4.0
-        image: registry.cn-beijing.aliyuncs.com/yunionio/onecloud-clusterapi-manager:latest
+        image: {{.Image}}
         command:
         - /manager
         - -auth-url={{.YunionAuthURL}}
         - -username={{.YunionAdminUser}}
         - -password={{.YunionAdminPasswd}}
-        - -project={{.YunionRegion}}
+        - -project={{.YunionAdminProject}}
         volumeMounts:
         - mountPath: /etc/kubernetes
           name: kubernetes-config
