@@ -127,6 +127,7 @@ type SystemImages struct {
 	Tiller              string `yaml:"tiller" json:"tiller"`
 	YunionCloudMonitor  string `yaml:"yunion_cloud_monitor" json:"yunionCloudMonitor"`
 	YunionCloudProvider string `yaml:"yunion_cloud_provider" json:"yunionCloudProvider"`
+	OnecloudClusterapi  string `yaml:"onecloud_clusterapi" json:"onecloudClusterapi"`
 }
 
 type ConfigNode struct {
