@@ -99,7 +99,6 @@ type OnecloudClusterapiOptions struct {
 	YunionAdminUser    string
 	YunionAdminPasswd  string
 	YunionAdminProject string
-	YunionRegion       string
 	Image              string
 }
 
@@ -621,7 +620,6 @@ func (c *Cluster) deployOnecloudClusterAPI(ctx context.Context) error {
 		YunionAdminUser:    c.YunionConfig.AdminUser,
 		YunionAdminPasswd:  c.YunionConfig.AdminPassword,
 		YunionAdminProject: c.YunionConfig.AdminProject,
-		YunionRegion:       c.YunionConfig.Region,
 		Image:              c.SystemImages.OnecloudClusterapi,
 	}
 	yaml, err := addons.GetOnecloudClusterapiManifest(config)
