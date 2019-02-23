@@ -107,8 +107,12 @@ spec:
         {{ $k }}: {{ $v }}
       {{ end }}
       tolerations:
-        - key: "CriticalAddonsOnly"
-          operator: "Exists"
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
       containers:
       - name: coredns
         image: {{.CoreDNSImage}}
