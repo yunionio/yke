@@ -1061,6 +1061,10 @@ spec:
       hostNetwork: true
       serviceAccountName: onecloud-clusterapi-manager
       tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
       # this is required so CCM can bootstrap itself
       - key: node.cloudprovider.kubernetes.io/uninitialized
         value: "true"
